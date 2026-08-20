@@ -1,0 +1,7 @@
+# Um link por linha: video avulso ou playlist.
+# Linhas vazias e comecadas com # sao ignoradas.
+
+https://www.youtube.com/playlist?list=PLhl_zGqovGjmdSQ7Go9c2OoelFCzjl9Yx
+
+# https://www.youtube.com/watch?v=aqz-KE-bpKQ
+# https://www.youtube.com/playlist?list=PLB29CbKaE2OY
