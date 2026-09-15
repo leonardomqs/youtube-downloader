@@ -1,0 +1,125 @@
+Um histórico por formato, e o que já foi baixado deixa de contar como falha
+
+O `--archive` é a opção que promete "baixe aos poucos, não repita o que já
+veio". Ela fazia duas coisas erradas, e as duas só apareciam na segunda
+execução — que é a única em que ela serve para alguma coisa.
+
+
+TRÊS DEFEITOS
+
+1. `--format both` com histórico não gerava MP3 nenhum.
+
+   O histórico do yt-dlp guarda `extractor id` e mais nada: nem o formato, nem
+   a resolução. A passada de MP4 registrava o id do vídeo e a de MP3, logo em
+   seguida, encontrava esse mesmo id e pulava tudo. Pedia-se dois formatos,
+   recebia-se um, e o resumo dizia "Tudo pronto".
+
+   Agora cada formato tem o seu arquivo: `--archive baixados.txt` passa a criar
+   `baixados.mp4.txt` e `baixados.mp3.txt`. Quem já tiver um `baixados.txt` de
+   antes precisa copiá-lo sobre o do formato que usava; senão ele é ignorado em
+   silêncio e a próxima rodada baixa tudo de novo.
+
+2. Vídeo pulado pelo histórico era contado como falha.
+
+   Um item que o histórico pula volta como `None` na lista de entradas —
+   exatamente como um vídeo privado, removido ou bloqueado por região. O
+   contador tratava os dois do mesmo jeito: rodar de novo uma playlist já
+   baixada imprimia uma parede de "motivo desconhecido" e saía com código 1,
+   que num script agendado é um alarme falso por dia.
+
+   O yt-dlp só consulta o histórico para decidir se pula o item — em
+   `in_download_archive`, chamado de dois lugares —, então é ali que os dois
+   casos ainda são distinguíveis. O `Baixador` conta as consultas positivas e
+   `baixar()` desconta essa quantidade das falhas. O resumo ganhou a distinção:
+
+       MP4: 0 vídeo(s), 1 já no histórico em downloads\mp4
+
+   e o código de saída volta a ser 0.
+
+3. `--cookies-from-browser chrome:Default` não funcionava.
+
+   O parsing de `NAVEGADOR[+KEYRING][:PERFIL][::CONTAINER]` mora em
+   `yt_dlp/__init__.py`, que só a linha de comando do próprio yt-dlp executa: a
+   API recebe a tupla pronta. Passando a string crua, qualquer coisa além do
+   nome puro em minúsculas — `Chrome` incluído — morria como "unsupported
+   browser" lá dentro, depois da espera.
+
+   A tradução agora acontece no argparse, antes de qualquer rede, e o nome
+   recusado vem acompanhado da lista dos que existem.
+
+
+O QUE FICOU MAIS FÁCIL
+
+    uv run main.py https://youtu.be/jNQXAC9IVRw    link solto, sem arquivo
+    uv run main.py links.txt --dry-run             lista sem baixar
+    uv run main.py links.txt -j 8                  fragmentos em paralelo
+    uv run main.py links.txt --limit-rate 2M       segura a banda
+
+Os links podem vir soltos agora, misturados com arquivos na mesma chamada. A
+lista em `.txt` continua sendo o caminho principal — é ela que guarda uma fila
+entre um dia e outro —, mas exigir um arquivo para baixar um vídeo era
+cerimônia.
+
+`--dry-run` responde à pergunta que só a playlist faz: o que exatamente vai
+cair nessa pasta? Imprime a lista numerada, na ordem em que baixaria, sem criar
+pasta nenhuma e sem baixar byte nenhum.
+
+`-j/--concurrent-fragments` entra com padrão 4. O padrão do yt-dlp é 1, e vídeo
+do YouTube vem fragmentado: era velocidade parada na mesa.
+
+E os argumentos passaram a ser conferidos na entrada. `--max-height 0`,
+`--audio-quality alta` e `--limit-rate rapido` falham na hora, com uma linha
+que diz o que se esperava, em vez de virar erro obscuro no meio de uma fila de
+quarenta vídeos.
+
+
+A PRIMEIRA SUÍTE DE TESTES
+
+35 verificações em `tests/test_main.py`, nenhuma delas tocando a rede. Duas
+existem para os defeitos 1 e 2 acima: uma confere que os históricos de MP4 e
+MP3 são arquivos diferentes, a outra que uma rodada com dois itens pulados e um
+baixado devolve `(1 baixado, 2 pulados, nenhuma falha)`.
+
+Testar `baixar()` sem rede pedia um `BaixadorFalso` — a classe é substituída no
+módulo e devolve resultados prontos, incluindo a exceção que verifica se um
+link quebrado derruba ou não a fila inteira. Já `in_download_archive` é testado
+contra o `Baixador` de verdade, com um arquivo de histórico temporário: é
+justamente a integração com o yt-dlp que o defeito 2 mostrou ser frágil.
+
+`pytest` e `ruff` entram como grupo `dev`, com a configuração no `pyproject`
+(`pythonpath`, `testpaths`, linha de 100 colunas, regras E/F/I/UP/B/SIM).
+
+    uv sync --group dev
+    uv run pytest
+    uv run ruff check .
+
+
+O QUE NÃO MUDOU, DE PROPÓSITO
+
+`--format both` continua baixando duas vezes: o vídeo completo e, depois, a
+melhor faixa de áudio. Extrair o MP3 do MP4 já baixado pouparia metade do
+tráfego, mas o áudio sairia do AAC remuxado em vez da faixa original — que no
+YouTube costuma ser Opus. Trocar qualidade por banda é uma decisão de quem usa,
+e nada no programa pediu para tomá-la agora.
+
+O `.gitignore` acompanha o nome novo do histórico (`baixados*.txt`) e passa a
+ignorar `.pytest_cache/` e `.ruff_cache/`. Versão em 0.2.0, e `--version`
+mostra junto a do yt-dlp — que é a que importa quando o YouTube muda alguma
+coisa e o download para.
+
+
+CONFERIDO
+
+As 35 verificações passam, e `ruff check` e `ruff format --check` estão limpos
+nos três arquivos. Contra a rede, com "Me at the zoo" e uma playlist real:
+
+- `--format both --archive`: saem o `.mp4` e o `.mp3` na mesma rodada (antes
+  saía só o `.mp4`), e o histórico vira dois arquivos;
+- o mesmo comando repetido: `0 vídeo(s), 1 já no histórico` nos dois formatos,
+  código de saída 0 (antes: duas falhas e código 1);
+- `--dry-run --playlist-items 1-3` numa playlist de verdade: três títulos
+  numerados, nenhuma pasta criada;
+- link inexistente: a falha aparece no resumo com o motivo do yt-dlp e o código
+  de saída é 1 — o caminho de erro continua inteiro;
+- `--cookies-from-browser explorer` e `--limit-rate rapido`: recusados pelo
+  argparse, com a lista do que é aceito.

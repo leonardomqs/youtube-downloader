@@ -9,6 +9,10 @@ wheels/
 # Virtual environments
 .venv
 
+# Testes
+.pytest_cache/
+.ruff_cache/
+
 # Saida do downloader
 downloads/
-baixados.txt
+baixados*.txt

@@ -1,6 +1,6 @@
 [project]
 name = "youtube-downloader"
-version = "0.1.0"
+version = "0.2.0"
 description = "Baixa listas de videos do YouTube (arquivo .txt) em MP4 e/ou MP3"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -8,3 +8,19 @@ dependencies = [
     "imageio-ffmpeg>=0.6.0",
     "yt-dlp>=2026.8.19",
 ]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "ruff>=0.6",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
