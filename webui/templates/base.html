@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}youtube-downloader{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+  {#
+    A identidade visual entra em static/brand.css, que sobrescreve as variáveis
+    de app.css. Nenhum template precisa mudar para trocar cores, fonte ou
+    logotipo — é o motivo de tudo aqui usar var(--...).
+  #}
+  <link rel="stylesheet" href="{{ url_for('static', filename='brand.css') }}">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="{{ url_for('ytdl.index') }}">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span class="brand-name">youtube<b>downloader</b></span>
+    </a>
+
+    <nav class="tabs">
+      {% set here = request.endpoint %}
+      <a class="tab {{ 'tab--active' if here in ('ytdl.index', 'ytdl.start_download') }}"
+         href="{{ url_for('ytdl.index') }}">Baixar</a>
+      <a class="tab {{ 'tab--active' if here in ('ytdl.runs', 'ytdl.run') }}"
+         href="{{ url_for('ytdl.runs') }}">Rodadas</a>
+    </nav>
+
+    <span class="topbar-note">tudo acontece nesta máquina</span>
+  </header>
+
+  <main class="page">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, text in messages %}
+          <p class="flash flash--{{ category }}">{{ text }}</p>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="footer">
+    <p class="footer-note">
+      Nada sai desta máquina: o servidor roda em 127.0.0.1 e os vídeos vão
+      direto para a pasta que você escolher. Fechar a janela do servidor
+      interrompe o download em andamento.
+    </p>
+    {# O crédito vem de `routes.AUTHOR` e `routes.REPO_URL`, não escrito aqui:
+       o endereço muda se o repositório for renomeado, e um template é o
+       último lugar onde alguém iria procurá-lo. #}
+    <p class="footer-credit">
+      Desenvolvido por {{ author }} ·
+      <a class="footer-link" href="{{ repo_url }}"
+         target="_blank" rel="noopener">código no GitHub</a>
+    </p>
+  </footer>
+</body>
+</html>

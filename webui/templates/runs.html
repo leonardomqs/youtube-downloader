@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}Rodadas · youtube-downloader{% endblock %}
+
+{% block content %}
+<h1>Rodadas desta sessão</h1>
+<p class="lede">
+  O que foi pedido desde que a interface subiu. A lista vive na memória do
+  servidor: fechar a janela dele apaga o histórico — os arquivos baixados,
+  não.
+</p>
+
+{% if not runs %}
+  <section class="card">
+    <p class="empty">Nada ainda.
+      <a class="link" href="{{ url_for('ytdl.index') }}">Baixar alguma coisa</a>.</p>
+  </section>
+{% else %}
+  <section class="card">
+    <div class="scroll">
+      <table class="files-table">
+        <thead>
+          <tr>
+            <th>Hora</th>
+            <th>Estado</th>
+            <th>Formato</th>
+            <th class="num">Links</th>
+            <th class="num">Baixados</th>
+            <th class="num">Falhas</th>
+            <th>Destino</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for line in runs %}
+            <tr>
+              <td>{{ line.time }}</td>
+              <td><span class="badge badge--{{ line.state }}">{{ line.state_label }}</span></td>
+              <td>{{ line.format }}{{ ' (simulação)' if line.simulation }}</td>
+              <td class="num">{{ line.links }}</td>
+              <td class="num">{{ line.downloaded }}</td>
+              <td class="num">{{ line.failures or '' }}</td>
+              <td class="file-name">{{ line.destination }}</td>
+              <td class="num">
+                <a class="link" href="{{ url_for('ytdl.run', ident=line.id) }}">abrir</a>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+{% endif %}
+
+<p class="actions">
+  <a class="button button--primary" href="{{ url_for('ytdl.index') }}">Nova rodada</a>
+</p>
+{% endblock %}

@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+{% block title %}
+  {{ '[simulação] ' if status.simulation }}{{ status.state_label }} · youtube-downloader
+{% endblock %}
+
+{% block content %}
+{#
+  A página desenha o estado que o servidor mandou junto com ela e, daí em
+  diante, quem manda é o run.js: ele pergunta o andamento de segundo em segundo
+  e reescreve os mesmos elementos. Sem JavaScript a página continua legível —
+  só para de se atualizar sozinha, e o F5 resolve.
+#}
+<div id="run"
+     data-status-url="{{ url_for('ytdl.status', ident=run.id) }}"
+     data-stop-url="{{ url_for('ytdl.stop', ident=run.id) }}">
+
+  <h1>
+    {% if status.simulation %}O que seria baixado{% else %}Baixando{% endif %}
+    <span class="badge badge--{{ status.state }}" id="state">{{ status.state_label }}</span>
+  </h1>
+  <p class="lede">
+    {{ status.total_links }} link(s) · {{ status.targets|join(', ')|upper }} ·
+    destino <code>{{ status.destination }}</code>
+  </p>
+
+  <noscript>
+    <p class="warning">
+      <span aria-hidden="true">⚠</span>
+      <span>Sem JavaScript a página não se atualiza sozinha — recarregue para
+      ver o andamento.</span>
+    </p>
+  </noscript>
+
+  <section class="card">
+    <h2>Andamento</h2>
+    <div class="progress">
+      <div class="progress-title" id="title">{{ status.title or '—' }}</div>
+      <div class="progress-phase">
+        <span id="phase">{{ status.phase }}</span>
+        <span id="position">
+          {%- if status.current_link %} · link {{ status.current_link }} de {{ status.total_links }}{% endif -%}
+        </span>
+      </div>
+
+      <div class="bar">
+        <div class="bar-fill" id="bar" style="width: {{ status.percent }}%"></div>
+      </div>
+
+      <div class="metrics">
+        <span><b id="percent">{{ status.percent }}</b>%</span>
+        <span id="speed">{{ status.speed }}</span>
+        <span id="eta">{{ 'faltam ' + status.eta if status.eta }}</span>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button class="button" type="button" id="stop"
+              {{ 'hidden' if status.is_over }}>Parar</button>
+      {% for target in status.targets %}
+        <form method="post" action="{{ url_for('ytdl.open_folder', ident=run.id, target=target) }}"
+              class="open-folder">
+          <button class="button button--quiet" type="submit">Abrir a pasta {{ target }}</button>
+        </form>
+      {% endfor %}
+      <a class="button button--quiet" href="{{ url_for('ytdl.index') }}">Nova rodada</a>
+    </div>
+  </section>
+
+  {# O resumo só existe quando acaba; até lá o cartão fica fora da página em
+     vez de ficar zerado, que pareceria resultado. #}
+  <section class="card" id="summary-card" {{ 'hidden' if not status.summary }}>
+    <h2>Resumo</h2>
+    <ul class="items" id="summary">
+      {% for line in status.summary %}
+        <li><span class="item-position">{{ line.label }}</span>
+            <span class="item-title">{{ line.verdict }}</span>
+            <span class="item-target">{{ line.folder }}</span></li>
+      {% endfor %}
+    </ul>
+    <p class="hint" id="error">{{ status.error }}</p>
+  </section>
+
+  <section class="card">
+    <h2>
+      {% if status.simulation %}Os vídeos da lista{% else %}Já baixados{% endif %}
+    </h2>
+    <p class="empty" id="items-empty" {{ 'hidden' if status.items }}>
+      {% if status.simulation %}
+        A lista aparece conforme o programa resolve cada link.
+      {% else %}
+        Nada terminou ainda.
+      {% endif %}
+    </p>
+    <ul class="items" id="items">
+      {% for item in status['items'] %}
+        <li>
+          <span class="item-position">{{ item.position }}</span>
+          <span class="item-title">{{ item.title }}</span>
+          <span class="item-target">{{ item.target }}</span>
+        </li>
+      {% endfor %}
+    </ul>
+  </section>
+
+  <section class="card card--error" id="failures-card" {{ 'hidden' if not status.failures }}>
+    <h2>Falhas</h2>
+    <ul class="items" id="failures">
+      {% for failure in status.failures %}
+        <li><span class="item-title item-error">{{ failure.reason }}</span></li>
+      {% endfor %}
+    </ul>
+    <p class="hint">
+      Um vídeo indisponível não interrompe o resto — os outros continuam.
+    </p>
+  </section>
+
+  <details class="card">
+    <summary>O que o yt-dlp está dizendo</summary>
+    <pre class="log" id="log">{{ status.lines|join('\n') }}</pre>
+  </details>
+</div>
+
+<script src="{{ url_for('static', filename='run.js') }}"></script>
+{% endblock %}

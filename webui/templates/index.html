@@ -1,0 +1,208 @@
+{% extends "base.html" %}
+{% block title %}Baixar · youtube-downloader{% endblock %}
+
+{% block content %}
+<h1>Baixar do YouTube</h1>
+<p class="lede">
+  Cole os links — vídeos ou playlists —, escolha o formato e a pasta. Os
+  arquivos vão direto para o disco desta máquina, na melhor qualidade
+  disponível.
+</p>
+
+{% if not environment.ffmpeg %}
+  <p class="warning">
+    <span aria-hidden="true">⚠</span>
+    <span>
+      <b>ffmpeg não encontrado.</b> Sem ele não dá para juntar vídeo+áudio em
+      MP4 nem gerar MP3. Instale com <code>winget install Gyan.FFmpeg</code> e
+      reinicie a interface.
+    </span>
+  </p>
+{% endif %}
+{% if not environment.deno %}
+  <p class="warning">
+    <span aria-hidden="true">⚠</span>
+    <span>
+      <b>Nenhum runtime JavaScript.</b> Sem ele o YouTube pode não oferecer os
+      melhores formatos, e o vídeo sai com qualidade menor. Instale com
+      <code>winget install DenoLand.Deno</code>.
+    </span>
+  </p>
+{% endif %}
+
+{% if active %}
+  <p class="flash flash--ok">
+    Há uma rodada em andamento.
+    <a class="link" href="{{ url_for('ytdl.run', ident=active.id) }}">Acompanhar</a>
+  </p>
+{% endif %}
+
+<form class="card" method="post" action="{{ url_for('ytdl.start_download') }}" id="form">
+
+  <label class="field field--wide">
+    <span class="label">Links</span>
+    <textarea name="links" id="links" rows="7"
+              placeholder="https://www.youtube.com/watch?v=...">{{ links }}</textarea>
+    <span class="hint">
+      Um por linha. Linhas começadas com <code>#</code> são ignoradas, e links
+      repetidos baixam uma vez só. O caminho de um arquivo <code>.txt</code>
+      também vale, para quem já mantém a lista em disco.
+    </span>
+  </label>
+
+  <div class="fields">
+    <label class="field">
+      <span class="label">O que baixar</span>
+      <select name="format" id="format">
+        {% for value, name in formats %}
+          <option value="{{ value }}">{{ name }}</option>
+        {% endfor %}
+      </select>
+      <span class="hint" id="format-hint"></span>
+    </label>
+
+    <label class="field" id="field-height">
+      <span class="label">Resolução</span>
+      <select name="max_height">
+        {% for value, name in heights %}
+          <option value="{{ value }}">{{ name }}</option>
+        {% endfor %}
+      </select>
+      <span class="hint">Segura o tamanho de vídeos longos.</span>
+    </label>
+
+    <label class="field" id="field-quality" hidden>
+      <span class="label">Qualidade do MP3</span>
+      <select name="audio_quality">
+        {% for value, name in qualities %}
+          <option value="{{ value }}">{{ name }}</option>
+        {% endfor %}
+      </select>
+      <span class="hint">O MP3 sai com capa e metadados embutidos.</span>
+    </label>
+  </div>
+
+  <label class="field field--wide">
+    <span class="label">Pasta de destino</span>
+    <input type="text" name="output" value="{{ output }}">
+    <span class="hint">
+      Dentro dela saem as subpastas <code>mp4/</code> e <code>mp3/</code>, e
+      cada playlist ganha uma pasta com o nome dela.
+    </span>
+  </label>
+
+  {# Playlists e ajustes finos ficam recolhidos: quem cola um link de vídeo e
+     clica em Baixar não precisa atravessar decisão nenhuma para chegar lá. #}
+  <details class="advanced">
+    <summary>Playlists</summary>
+
+    <div class="fields">
+      <label class="field">
+        <span class="label">Quais itens</span>
+        <input type="text" name="playlist_items" placeholder="1-10, 15, 20-">
+        <span class="hint">Em branco, baixa a lista inteira.</span>
+      </label>
+
+      <div class="field">
+        <span class="label">Como</span>
+        <span class="choice">
+          <input type="checkbox" name="playlist_folder" checked>
+          <span>Criar uma subpasta por playlist</span>
+        </span>
+        <span class="choice">
+          <input type="checkbox" name="playlist_reverse">
+          <span>Do fim para o começo</span>
+        </span>
+        <span class="choice">
+          <input type="checkbox" name="playlist">
+          <span>Link de vídeo dentro de playlist: baixar a lista toda</span>
+        </span>
+      </div>
+    </div>
+  </details>
+
+  <details class="advanced">
+    <summary>Avançado</summary>
+
+    <label class="field field--wide">
+      <span class="label">Histórico</span>
+      <input type="text" name="archive" placeholder="baixados.txt">
+      <span class="hint">
+        Guarda o que já veio e não baixa de novo na próxima rodada. Cada
+        formato tem o seu arquivo: <code>baixados.txt</code> vira
+        <code>baixados.mp4.txt</code> e <code>baixados.mp3.txt</code>.
+      </span>
+    </label>
+
+    <div class="fields">
+      <label class="field">
+        <span class="label">Fragmentos em paralelo</span>
+        <input type="text" name="concurrent_fragments" value="4">
+        <span class="hint">Deixe 1 para desligar.</span>
+      </label>
+
+      <label class="field">
+        <span class="label">Limite de velocidade</span>
+        <input type="text" name="limit_rate" placeholder="2M">
+        <span class="hint">Em branco, sem limite.</span>
+      </label>
+
+      <label class="field">
+        <span class="label">Cookies do navegador</span>
+        <select name="cookies">
+          <option value="">Não usar</option>
+          {% for browser in browsers %}
+            <option value="{{ browser }}">{{ browser }}</option>
+          {% endfor %}
+        </select>
+        <span class="hint">Para vídeos restritos ou que exigem login.</span>
+      </label>
+    </div>
+  </details>
+
+  <div class="actions">
+    <button class="button button--primary" type="submit" name="action" value="download">
+      Baixar
+    </button>
+    <button class="button" type="submit" name="action" value="simulate">
+      Ver o que será baixado
+    </button>
+    <span class="hint">
+      A simulação lista os vídeos, na ordem, sem baixar nada.
+    </span>
+  </div>
+</form>
+
+<script>
+  // A resolução não diz nada a quem pediu só o áudio, e a qualidade do MP3 não
+  // diz nada a quem pediu só o vídeo. Cada um vê o campo que é seu.
+  const format = document.getElementById("format");
+  const heightField = document.getElementById("field-height");
+  const qualityField = document.getElementById("field-quality");
+  const hint = document.getElementById("format-hint");
+
+  const HINTS = {
+    mp4: "Melhor vídeo + melhor áudio, num arquivo só.",
+    mp3: "Só a faixa de áudio, convertida com capa e metadados.",
+    both: "Duas passadas: o vídeo e, depois, o áudio na melhor faixa.",
+  };
+
+  function adjust() {
+    const value = format.value;
+    heightField.hidden = value === "mp3";
+    qualityField.hidden = value === "mp4";
+    hint.textContent = HINTS[value] || "";
+  }
+  format.addEventListener("change", adjust);
+  adjust();
+
+  document.getElementById("form").addEventListener("submit", (event) => {
+    const links = document.getElementById("links").value
+      .split("\n").map(l => l.trim()).filter(l => l && !l.startsWith("#"));
+    if (!links.length) {
+      event.preventDefault();
+      alert("Cole pelo menos um link.");
+    }
+  });
+</script>
+{% endblock %}

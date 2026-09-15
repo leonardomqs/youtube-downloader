@@ -1,125 +1,195 @@
-Um histórico por formato, e o que já foi baixado deixa de contar como falha
+Uma interface de navegador, e o serviço que as duas interfaces chamam
 
-O `--archive` é a opção que promete "baixe aos poucos, não repita o que já
-veio". Ela fazia duas coisas erradas, e as duas só apareciam na segunda
-execução — que é a única em que ela serve para alguma coisa.
+Baixar uma playlist pela linha de comando é meia hora de texto rolando, em que
+saber quanto falta exige ler a barra do vídeo atual e contar o resto de cabeça.
+E antes disso é preciso instalar o uv, abrir um terminal na pasta certa e
+lembrar que `--playlist-items 1-10` existe. Cada uma dessas etapas é trivial
+para quem as conhece e é um muro para quem não as conhece.
 
-
-TRÊS DEFEITOS
-
-1. `--format both` com histórico não gerava MP3 nenhum.
-
-   O histórico do yt-dlp guarda `extractor id` e mais nada: nem o formato, nem
-   a resolução. A passada de MP4 registrava o id do vídeo e a de MP3, logo em
-   seguida, encontrava esse mesmo id e pulava tudo. Pedia-se dois formatos,
-   recebia-se um, e o resumo dizia "Tudo pronto".
-
-   Agora cada formato tem o seu arquivo: `--archive baixados.txt` passa a criar
-   `baixados.mp4.txt` e `baixados.mp3.txt`. Quem já tiver um `baixados.txt` de
-   antes precisa copiá-lo sobre o do formato que usava; senão ele é ignorado em
-   silêncio e a próxima rodada baixa tudo de novo.
-
-2. Vídeo pulado pelo histórico era contado como falha.
-
-   Um item que o histórico pula volta como `None` na lista de entradas —
-   exatamente como um vídeo privado, removido ou bloqueado por região. O
-   contador tratava os dois do mesmo jeito: rodar de novo uma playlist já
-   baixada imprimia uma parede de "motivo desconhecido" e saía com código 1,
-   que num script agendado é um alarme falso por dia.
-
-   O yt-dlp só consulta o histórico para decidir se pula o item — em
-   `in_download_archive`, chamado de dois lugares —, então é ali que os dois
-   casos ainda são distinguíveis. O `Baixador` conta as consultas positivas e
-   `baixar()` desconta essa quantidade das falhas. O resumo ganhou a distinção:
-
-       MP4: 0 vídeo(s), 1 já no histórico em downloads\mp4
-
-   e o código de saída volta a ser 0.
-
-3. `--cookies-from-browser chrome:Default` não funcionava.
-
-   O parsing de `NAVEGADOR[+KEYRING][:PERFIL][::CONTAINER]` mora em
-   `yt_dlp/__init__.py`, que só a linha de comando do próprio yt-dlp executa: a
-   API recebe a tupla pronta. Passando a string crua, qualquer coisa além do
-   nome puro em minúsculas — `Chrome` incluído — morria como "unsupported
-   browser" lá dentro, depois da espera.
-
-   A tradução agora acontece no argparse, antes de qualquer rede, e o nome
-   recusado vem acompanhado da lista dos que existem.
+Agora `executar\interface.bat` abre uma página em 127.0.0.1:5300: cola os
+links, escolhe o formato e a pasta, e acompanha — com barra, velocidade, tempo
+restante, a lista do que já entrou e um botão de parar.
 
 
-O QUE FICOU MAIS FÁCIL
+A SEPARAÇÃO QUE VEIO ANTES DA TELA
 
-    uv run main.py https://youtu.be/jNQXAC9IVRw    link solto, sem arquivo
-    uv run main.py links.txt --dry-run             lista sem baixar
-    uv run main.py links.txt -j 8                  fragmentos em paralelo
-    uv run main.py links.txt --limit-rate 2M       segura a banda
+A tela não sabe baixar vídeo. Ela monta as opções e chama `service.run`, o
+mesmo que o terminal chama:
 
-Os links podem vir soltos agora, misturados com arquivos na mesma chamada. A
-lista em `.txt` continua sendo o caminho principal — é ela que guarda uma fila
-entre um dia e outro —, mas exigir um arquivo para baixar um vídeo era
-cerimônia.
+    service.py    o QUE acontece numa rodada        (sem interface)
+    cli.py        interface 1: terminal
+    webui/        interface 2: navegador
+    main.py       a porta de entrada de sempre, três linhas
 
-`--dry-run` responde à pergunta que só a playlist faz: o que exatamente vai
-cair nessa pasta? Imprime a lista numerada, na ordem em que baixaria, sem criar
-pasta nenhuma e sem baixar byte nenhum.
+Isso não é purismo. A cadeia de formatos do MP4 é uma linha que decide a
+qualidade de tudo o que sai daqui, e o defeito do histórico compartilhado —
+corrigido no commit anterior — levou dois meses para aparecer porque só se
+manifestava na segunda execução. Uma segunda cópia dessas regras dentro da tela
+funcionaria até a primeira correção feita de um lado só, e quem usa a tela é
+exatamente quem não saberia dizer por que o vídeo saiu pior.
 
-`-j/--concurrent-fragments` entra com padrão 4. O padrão do yt-dlp é 1, e vídeo
-do YouTube vem fragmentado: era velocidade parada na mesa.
+`main.py` continua sendo `main.py` porque `uv run main.py links.txt` está no
+README, nos atalhos e na memória de quem usa. Ele agora só chama o `cli`.
 
-E os argumentos passaram a ser conferidos na entrada. `--max-height 0`,
-`--audio-quality alta` e `--limit-rate rapido` falham na hora, com uma linha
-que diz o que se esperava, em vez de virar erro obscuro no meio de uma fila de
-quarenta vídeos.
+Duas peças fazem a costura:
 
+  `Options`   uma dataclass cujos campos têm os mesmos nomes das opções de
+              linha de comando. O `cli` a monta direto do argparse e a tela, do
+              formulário — sem tradutor no meio.
 
-A PRIMEIRA SUÍTE DE TESTES
+  `Observer`  o que cada interface quer saber enquanto a rodada acontece.
+              Métodos vazios por padrão: o terminal sobrescreve dois e deixa o
+              yt-dlp desenhar a própria barra; a tela sobrescreve todos, porque
+              precisa redesenhar sozinha.
 
-35 verificações em `tests/test_main.py`, nenhuma delas tocando a rede. Duas
-existem para os defeitos 1 e 2 acima: uma confere que os históricos de MP4 e
-MP3 são arquivos diferentes, a outra que uma rodada com dois itens pulados e um
-baixado devolve `(1 baixado, 2 pulados, nenhuma falha)`.
-
-Testar `baixar()` sem rede pedia um `BaixadorFalso` — a classe é substituída no
-módulo e devolve resultados prontos, incluindo a exceção que verifica se um
-link quebrado derruba ou não a fila inteira. Já `in_download_archive` é testado
-contra o `Baixador` de verdade, com um arquivo de histórico temporário: é
-justamente a integração com o yt-dlp que o defeito 2 mostrou ser frágil.
-
-`pytest` e `ruff` entram como grupo `dev`, com a configuração no `pyproject`
-(`pythonpath`, `testpaths`, linha de 100 colunas, regras E/F/I/UP/B/SIM).
-
-    uv sync --group dev
-    uv run pytest
-    uv run ruff check .
+As mensagens de erro de valor inválido moram no serviço (`InvalidInput`) e
+são as mesmas nos dois lugares. O argparse ganhou um adaptador de três linhas
+em vez de uma segunda lista de mensagens.
 
 
-O QUE NÃO MUDOU, DE PROPÓSITO
+O QUE A TELA FAZ QUE O TERMINAL NÃO FAZIA
 
-`--format both` continua baixando duas vezes: o vídeo completo e, depois, a
-melhor faixa de áudio. Extrair o MP3 do MP4 já baixado pouparia metade do
-tráfego, mas o áudio sairia do AAC remuxado em vez da faixa original — que no
-YouTube costuma ser Opus. Trocar qualidade por banda é uma decisão de quem usa,
-e nada no programa pediu para tomá-la agora.
+    Ver o que será baixado   a simulação com botão: lista os vídeos numerados,
+                             na ordem, sem criar pasta nem baixar nada
+    Acompanhar               barra, velocidade, tempo restante, o que já entrou
+    Parar                    interrompe no meio do arquivo, não no fim do vídeo
+    Abrir a pasta            o explorador na pasta de destino
+    Rodadas                  o histórico da sessão
 
-O `.gitignore` acompanha o nome novo do histórico (`baixados*.txt`) e passa a
-ignorar `.pytest_cache/` e `.ruff_cache/`. Versão em 0.2.0, e `--version`
-mostra junto a do yt-dlp — que é a que importa quando o YouTube muda alguma
-coisa e o download para.
+A barra também explica a espera depois dos 100%: os `postprocessor_hooks` do
+yt-dlp viram "convertendo para MP3", "juntando vídeo e áudio", "embutindo a
+capa". Sem eles, converter um áudio de uma hora é uma tela congelada em 100%
+que parece travada.
+
+
+A DIFERENÇA EM RELAÇÃO AO AJEITA-PDF
+
+É o mesmo desenho — `create_app(WebConfig)`, blueprint, `templates/`,
+`static/`, os dois `.bat` — para um trabalho de outra natureza, e as diferenças
+todas saem daí:
+
+1. Comprimir um PDF cabe dentro de uma requisição HTTP. Baixar quarenta vídeos
+   não, e uma requisição de meia hora não é uma requisição, é uma tela branca.
+   A rodada virou uma thread, e a página pergunta `/run/<id>/status` de
+   segundo em segundo. Polling, e não SSE: é um servidor local, um usuário e
+   uma rodada por vez — não há o que reconectar.
+
+2. Não há upload nenhum. A tela recebe texto, o que apaga metade da camada de
+   entrada do ajeita-pdf: sem `secure_filename`, sem limite de envio, sem pasta
+   temporária por rodada.
+
+3. O resultado não é baixado pelo navegador: o vídeo já nasce na pasta que a
+   pessoa escolheu, porque o servidor roda na máquina dela. Servir um MP4 de
+   1 GB por `send_file` seria um desperdício de um lado a outro.
+
+4. O estado vive em memória. Não há arquivo temporário a expirar, então também
+   não há o `LIFETIME` de seis horas — o que precisa sobreviver entre uma
+   requisição e outra é só o andamento.
+
+`webui/jobs.py` tem o miolo: a `Run` **é** o observador que o serviço usa
+para contar o que está acontecendo. Uma classe a menos entre o download e a
+tela, e nenhuma chance de as duas versões do andamento discordarem.
+
+O `app.css` veio do ajeita-pdf sem uma linha de diferença, de propósito: são
+dois programas da mesma equipe, e uma correção de aparência feita lá deve poder
+ser copiada para cá sem conferir o que mudou no meio. O que é só desta
+interface fica numa seção no fim do arquivo. O `brand.css` continua vazio,
+esperando a identidade da Beehus.
+
+
+DOIS DEFEITOS QUE O TESTE CONTRA O YOUTUBE DESENTERROU
+
+Os dois apareceram baixando de verdade, não nos testes:
+
+1. Em MP4, cada vídeo entrava duas vezes na lista. O yt-dlp baixa dois arquivos
+   por vídeo — a imagem e o som, que só depois viram um só — e anuncia
+   "finished" para cada um. Agora o gancho lembra o que já anunciou.
+
+2. A simulação não listava nada. Sem download não há gancho de progresso, e os
+   vídeos só existem no resultado que o yt-dlp devolve no fim do link — ou
+   seja, exatamente a tela que existe para mostrar a lista era a que ficava
+   vazia. A lista agora é lida desse resultado.
+
+
+DECISÕES QUE VALEM O REGISTRO
+
+  Uma rodada por vez. O yt-dlp já baixa fragmentos em paralelo; dois downloads
+  simultâneos dividem a mesma banda, terminam no mesmo tempo somados e
+  transformam o andamento em duas barras que não explicam nada. A segunda
+  tentativa não abre fila: leva para a rodada que está rodando.
+
+  Parar de verdade. O yt-dlp não tem um "stop"; a forma suportada é levantar
+  `DownloadCancelled` de dentro do gancho de progresso, o que interrompe no
+  meio de um fragmento. Medido: 1,1 s para parar um download de 4K em curso.
+
+  127.0.0.1, e não se discute. Este servidor baixa da internet e escreve em
+  qualquer pasta do disco; exposto na rede, vira um serviço de download para
+  quem chegar, com o seu IP e os seus cookies de navegador.
+
+  `debug=False`. O recarregador do Flask sobe um segundo processo, e cada
+  download em andamento viraria dois.
+
+  Thread daemon: fechar a janela do servidor encerra o download junto. É o que
+  a pessoa espera ao fechar a janela, e os dois `.bat` e o rodapé da página
+  dizem isso em voz alta.
+
+  Porta 5300 — a 5000 está ocupada nas máquinas da equipe, a 5100 é do
+  mira-carga e a 5200 é do ajeita-pdf. Ela vive em dois lugares que precisam
+  concordar: `executar\interface.bat` e `webui\__main__.py`.
+
+O Flask é um grupo opcional (`uv sync --group interface`): quem usa só o
+terminal não precisa de um servidor web instalado para baixar um vídeo.
+
+
+O IDIOMA, QUE ESTE COMMIT PADRONIZA
+
+Identificadores em inglês; comentários, docstrings, README e tudo o que
+aparece na tela em português. É a convenção que o ajeita-pdf já declara no
+topo do `service.py` dele, e que aqui tinha ficado pela metade: o `main.py`
+original nomeava em português (`baixar`, `ler_links`, `Baixador`) e a
+separação em camadas levou esses nomes adiante.
+
+    baixar / rodar          ->  download / run
+    Baixador / Observador   ->  Downloader / Observer
+    Opcoes / Resultado      ->  Options / Result
+    Rodada / RegistroDeRodadas -> Run / RunRegistry
+    /rodada/<id>/parar      ->  /run/<id>/stop
+
+Os textos ficaram onde estavam: as mensagens de erro, os rótulos da tela e os
+nomes das fases ("convertendo para MP3", "embutindo a capa") são lidos por
+quem usa o programa. O estado da rodada agora tem os dois — `done` viaja no
+JSON e nas classes de CSS, "concluída" é o que a pessoa lê —, e a tradução
+mora num lugar só, em `routes.STATE_LABELS`.
 
 
 CONFERIDO
 
-As 35 verificações passam, e `ruff check` e `ruff format --check` estão limpos
-nos três arquivos. Contra a rede, com "Me at the zoo" e uma playlist real:
+74 verificações em três suítes (eram 35), `ruff check` e `ruff format --check`
+limpos nos onze arquivos — tudo já com os nomes novos. A suíte da tela roda com
+o download substituído — o executor é injetado em `create_app` —, então fila,
+andamento, interrupção e resumo são exercitados sem baixar um byte. É também o
+que prova que a página não sabe baixar nada sozinha: se soubesse, esses testes
+não passariam.
 
-- `--format both --archive`: saem o `.mp4` e o `.mp3` na mesma rodada (antes
-  saía só o `.mp4`), e o histórico vira dois arquivos;
-- o mesmo comando repetido: `0 vídeo(s), 1 já no histórico` nos dois formatos,
-  código de saída 0 (antes: duas falhas e código 1);
-- `--dry-run --playlist-items 1-3` numa playlist de verdade: três títulos
-  numerados, nenhuma pasta criada;
-- link inexistente: a falha aparece no resumo com o motivo do yt-dlp e o código
-  de saída é 1 — o caminho de erro continua inteiro;
-- `--cookies-from-browser explorer` e `--limit-rate rapido`: recusados pelo
-  argparse, com a lista do que é aceito.
+Contra o YouTube de verdade, com o servidor no ar:
+
+- simulação de uma playlist real: três títulos numerados na tela, na ordem, e
+  nenhuma pasta criada;
+- download em MP4 e MP3 na mesma rodada, com histórico: os dois arquivos no
+  disco, `hist.mp4.txt` e `hist.mp3.txt` separados, uma entrada por formato na
+  lista, e as fases em português aparecendo na ordem ("embutindo a capa",
+  "guardando na pasta");
+- a mesma rodada repetida: "0 vídeo(s), 1 já no histórico" nos dois formatos,
+  sem falha nenhuma;
+- segunda rodada pedida com uma em andamento: não abre fila — a resposta leva
+  para a que está rodando;
+- parar no meio de um download de 4K: cancelada em 1,1 s, com o estado indo a
+  `cancelled` e o rótulo a "cancelada";
+- `/`, `/runs`, `/run/<id>`, os três estáticos e o JSON de status respondem
+  200;
+- a linha de comando continua igual: `--version`, `--dry-run` de playlist com
+  `--playlist-items`, resumo e códigos de saída.
+
+A página sem JavaScript continua legível — é o que
+`test_the_run_page_draws_without_javascript` confere, desenhando a lista de
+itens e a pasta de destino a partir do HTML servido.

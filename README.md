@@ -1,20 +1,60 @@
 # youtube-downloader
 
-Baixa vídeos e playlists do YouTube — a partir de **links soltos** na linha de comando ou de uma lista em um arquivo `.txt` — em **MP4** e/ou **MP3**, sempre na melhor qualidade disponível.
+Baixa vídeos e playlists do YouTube em **MP4** e/ou **MP3**, sempre na melhor qualidade disponível — **pelo navegador** ou **pela linha de comando**.
+
+- **[Interface de navegador](#interface-de-navegador-duplo-clique)** — dois duplo cliques, uma página: cola os links, escolhe o formato e acompanha o download.
+- **[Linha de comando](#uso-pela-linha-de-comando)** — para quem já está no terminal, para listas grandes e para automatizar.
+
+As duas fazem exatamente a mesma coisa: chamam o mesmo `service.py`.
 
 ## Requisitos
 
 - [uv](https://docs.astral.sh/uv/) (Python 3.12)
 - `ffmpeg` — se não estiver instalado, o programa usa automaticamente o binário que vem com o pacote `imageio-ffmpeg` (já é dependência). Para usar o do sistema: `winget install Gyan.FFmpeg`.
-- Recomendado: [Deno](https://deno.com/) (`winget install DenoLand.Deno`). Sem um runtime JavaScript, o YouTube não expõe todos os formatos ao yt-dlp e você pode perder qualidade. O programa avisa se não encontrar.
+- Recomendado: [Deno](https://deno.com/) (`winget install DenoLand.Deno`). Sem um runtime JavaScript, o YouTube não expõe todos os formatos ao yt-dlp e você pode perder qualidade. O programa avisa se não encontrar — no terminal e na tela.
 
 ## Instalação
 
-```bash
-uv sync
+Por duplo clique:
+
+```
+executar\instalar.bat
 ```
 
-## Uso
+Ele procura o uv, cria o ambiente com as versões travadas em `uv.lock` (incluindo o Flask, que a interface usa) e confere o ffmpeg e o Deno — cada um deles, quando falta, é avisado com o comando de instalação.
+
+Ou, no terminal:
+
+```bash
+uv sync --group interface
+```
+
+Sem o `--group interface`, tudo funciona igual, menos a interface de navegador.
+
+## Interface de navegador (duplo clique)
+
+```
+executar\interface.bat
+```
+
+Uma página abre em `http://127.0.0.1:5300`. Nela:
+
+- **Links** — um por linha, vídeos ou playlists. O campo já vem preenchido com o seu `links.txt`.
+- **O que baixar** — MP4, MP3 ou os dois; resolução máxima ou qualidade do MP3.
+- **Pasta de destino** — os arquivos vão direto para lá, sem passar por download do navegador.
+- **Ver o que será baixado** — lista os vídeos, numerados e na ordem, sem baixar nada. É o `--dry-run` com botão.
+- **Acompanhar** — barra de progresso, velocidade, tempo restante, o que já entrou e o que falhou. Inclusive durante a conversão para MP3, que é a parte em que a barra pareceria travada.
+- **Parar** — interrompe no meio do arquivo, sem esperar o vídeo terminar.
+
+Uma rodada por vez: o yt-dlp já baixa fragmentos em paralelo, e dois downloads simultâneos só dividiriam a mesma banda.
+
+> O servidor roda **só nesta máquina** (`127.0.0.1`). Não publique na rede: ele baixa da internet e escreve em qualquer pasta do disco.
+>
+> Fechar a janela do servidor **interrompe o download em andamento**.
+>
+> A porta 5300 está em dois lugares que precisam concordar: `executar\interface.bat`, que abre o navegador, e `webui\__main__.py`, que sobe o servidor.
+
+## Uso pela linha de comando
 
 ```bash
 # um link direto, em MP4 (padrão)
@@ -118,8 +158,23 @@ O que foi pulado aparece no resumo como *já no histórico* — não conta como 
 
 - **MP4**: melhor vídeo + melhor áudio, combinados em um único `.mp4` com metadados.
 - **MP3**: melhor faixa de áudio convertida para MP3, com metadados e a capa (thumbnail) embutida.
-- Erros não derrubam a fila: nem um link ruim no arquivo, nem um vídeo indisponível no meio de uma playlist. No fim aparece um resumo com o total baixado, o que já estava no histórico e as falhas; o código de saída é `1` se algo falhou.
+- Erros não derrubam a fila: nem um link ruim no arquivo, nem um vídeo indisponível no meio de uma playlist. No fim aparece um resumo com o total baixado, o que já estava no histórico e as falhas; na linha de comando o código de saída é `1` se algo falhou.
 - Downloads interrompidos são retomados de onde pararam ao rodar de novo.
+
+## Como está organizado
+
+| Arquivo | O que é |
+| --- | --- |
+| `service.py` | O que acontece numa rodada — cadeia de formatos, histórico, contagem de falhas. Sem interface: não imprime nada e não conhece nem terminal nem tela. |
+| `cli.py` | Interface 1: o terminal. Argumentos, mensagens e o resumo. |
+| `main.py` | A porta de entrada de sempre: `uv run main.py links.txt`. |
+| `webui/` | Interface 2: o navegador. Fábrica Flask, rotas, as rodadas em thread, `templates/` e `static/`. |
+| `executar/` | Os dois `.bat` de duplo clique: instalar e abrir a interface. |
+| `tests/` | Três suítes, nenhuma usando rede. |
+
+**Idioma:** identificadores em inglês, comentários e documentação em português — e as mensagens de tela também, porque são lidas por quem usa o programa.
+
+As duas interfaces chamam `service.run`. É de propósito: a cadeia de formatos do MP4 decide a qualidade de tudo o que sai daqui, e uma segunda cópia dela dentro da tela funcionaria até a primeira correção feita de um lado só.
 
 ## Desenvolvimento
 
@@ -128,6 +183,15 @@ uv sync --group dev
 uv run pytest          # testes (não usam rede)
 uv run ruff check .    # lint
 uv run ruff format .   # formatação
+```
+
+A interface é testada com o download substituído — o executor é injetado em `create_app`, então a tela inteira (fila, andamento, interrupção, resumo) roda sem baixar um byte.
+
+Para subir a interface sem o `.bat`:
+
+```bash
+uv run python -m webui          # http://127.0.0.1:5300
+YTDL_PORT=5310 uv run python -m webui
 ```
 
 ## Aviso

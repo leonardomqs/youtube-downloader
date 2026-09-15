@@ -1,0 +1,23 @@
+/* Identidade visual da equipe.
+ *
+ * Este arquivo existe VAZIO de propósito. É o único lugar a mexer quando a
+ * identidade da Beehus for aplicada: redefina aqui as variáveis de app.css e
+ * nenhum template muda.
+ *
+ * Exemplo do que entra aqui:
+ *
+ *   :root {
+ *     --brand:       #003b5c;
+ *     --brand-light: #00537f;
+ *     --brand-ink:   #ffffff;
+ *     --font:        "Inter", system-ui, sans-serif;
+ *     --radius:      4px;
+ *   }
+ *
+ * Para o logotipo, troque .brand-mark por uma imagem:
+ *
+ *   .brand-mark {
+ *     width: 26px; height: 26px; border: 0;
+ *     background: url("logo.svg") center/contain no-repeat;
+ *   }
+ */

@@ -1,0 +1,362 @@
+/* Aparência da interface.
+ *
+ * Tudo o que define a marca — cor, fonte, raio de borda — está nas variáveis
+ * abaixo. A identidade visual da equipe entra em `brand.css`, que é carregado
+ * depois e só redefine essas variáveis. Nenhum template precisa mudar.
+ */
+
+:root {
+  --ink:          #1c2530;
+  --ink-soft:     #5b6875;
+  --bg:           #f4f6f8;
+  --surface:      #ffffff;
+  --border:       #dfe4ea;
+
+  --brand:        #1f3a5f;
+  --brand-light:  #2f5687;
+  --brand-ink:    #ffffff;
+
+  --ok:           #1b5e20;
+  --ok-bg:        #eaf4ec;
+  --warn:         #8a6100;
+  --warn-bg:      #fdf0d5;
+  --error:        #9b1c1c;
+  --error-bg:     #fbe9e7;
+
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "Cascadia Mono", Consolas, "SF Mono", monospace;
+
+  --radius: 8px;
+  --shadow: 0 1px 2px rgba(28, 37, 48, .06), 0 4px 12px rgba(28, 37, 48, .05);
+  --width: 900px;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+/* ----------------------------------------------------------------- topo */
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 24px;
+  background: var(--brand);
+  color: var(--brand-ink);
+}
+
+.brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: inherit; }
+.brand-mark {
+  width: 18px; height: 18px; border-radius: 50%;
+  border: 3px solid currentColor; opacity: .9;
+}
+.brand-name { font-size: 18px; letter-spacing: .2px; }
+.brand-name b { font-weight: 700; }
+.topbar-note { margin-left: auto; font-size: 13px; opacity: .75; }
+
+.tabs { display: flex; gap: 4px; margin-left: 18px; }
+.tab {
+  padding: 6px 14px; border-radius: 6px;
+  color: inherit; text-decoration: none;
+  font-size: 14px; opacity: .75;
+}
+.tab:hover { background: rgba(255, 255, 255, .12); opacity: 1; }
+.tab--active { background: rgba(255, 255, 255, .18); opacity: 1; font-weight: 600; }
+
+.page { max-width: var(--width); margin: 28px auto 48px; padding: 0 24px; }
+
+h1 { font-size: 24px; margin: 0 0 6px; }
+h2 { font-size: 15px; margin: 0 0 12px; text-transform: uppercase;
+     letter-spacing: .6px; color: var(--ink-soft); }
+.lede { margin: 0 0 22px; color: var(--ink-soft); max-width: 62ch; }
+
+/* -------------------------------------------------------------- cartões */
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 20px;
+  margin-bottom: 18px;
+}
+.card--error { border-left: 4px solid var(--error); }
+.card--warn  { border-left: 4px solid var(--warn); }
+.card p { margin: 0; max-width: 70ch; }
+
+details.card > summary { cursor: pointer; color: var(--ink-soft);
+                         font-size: 13px; text-transform: uppercase; letter-spacing: .6px; }
+details.card[open] > summary { margin-bottom: 14px; }
+
+/* --------------------------------------------------------------- campos */
+
+.fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+          gap: 16px; margin-bottom: 16px; }
+.field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
+.field--wide { grid-column: 1 / -1; }
+.label { font-weight: 600; font-size: 13px; }
+.hint { font-size: 12.5px; color: var(--ink-soft); }
+.muted { font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--ink-soft); }
+
+select, input[type="text"], input[type="file"] {
+  font: inherit;
+  padding: 9px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: inherit;
+}
+select:focus, input:focus { outline: 2px solid var(--brand-light); outline-offset: 1px; }
+input[type="text"]:disabled { background: var(--bg); color: var(--ink-soft); }
+
+.choice { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+.choice input { width: 16px; height: 16px; }
+
+.advanced { margin: 4px 0 18px; }
+.advanced > summary { cursor: pointer; font-size: 13px; color: var(--ink-soft); }
+.advanced[open] > summary { margin-bottom: 12px; }
+
+/* ------------------------------------------------- lista reordenável */
+
+.order-actions { display: flex; gap: 8px; margin: 4px 0 8px; }
+.button--small { padding: 4px 10px; font-size: 12px; font-weight: 500; }
+
+.file-list {
+  list-style: none; margin: 0; padding: 0;
+  border: 1px solid var(--border); border-radius: 6px;
+  max-height: 340px; overflow-y: auto;
+  counter-reset: position;
+}
+
+.item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  cursor: grab;
+}
+.item:last-child { border-bottom: 0; }
+.item::before {
+  counter-increment: position;
+  content: counter(position);
+  min-width: 22px; text-align: right;
+  font-size: 12px; color: var(--ink-soft); font-variant-numeric: tabular-nums;
+}
+.item.dragging { opacity: .4; }
+.item.drop-target { background: var(--ok-bg); }
+
+.item-grip { color: var(--ink-soft); font-size: 13px; cursor: grab; }
+.item-name { flex: 1; font-family: var(--font-mono); font-size: 12px; word-break: break-all; }
+.item-size { font-size: 12px; color: var(--ink-soft); white-space: nowrap;
+             font-variant-numeric: tabular-nums; }
+
+.item-arrows { display: flex; gap: 2px; }
+.move {
+  font: inherit; font-size: 12px; line-height: 1;
+  width: 24px; height: 24px; padding: 0;
+  border: 1px solid var(--border); border-radius: 4px;
+  background: var(--surface); color: var(--ink); cursor: pointer;
+}
+.move:hover:not(:disabled) { border-color: var(--brand-light); }
+.move:disabled { opacity: .3; cursor: default; }
+
+/* --------------------------------------------------------------- botões */
+
+.actions { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-top: 8px; }
+.actions--save { align-items: flex-end; margin-top: 18px; }
+.actions--save .field { flex: 1 1 340px; margin-bottom: 0; }
+
+.button {
+  display: inline-block;
+  font: inherit; font-weight: 600;
+  padding: 10px 18px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+  text-decoration: none;
+}
+.button:hover { border-color: var(--brand-light); }
+.button:disabled { opacity: .6; cursor: progress; }
+.button--primary {
+  background: var(--brand); border-color: var(--brand); color: var(--brand-ink);
+}
+.button--primary:hover { background: var(--brand-light); }
+.button--quiet { background: transparent; }
+
+.link { color: var(--brand-light); text-decoration: none; font-weight: 600; }
+.link:hover { text-decoration: underline; }
+
+/* ------------------------------------------------------------- veredito */
+
+.verdict {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 16px 20px; margin-bottom: 18px;
+  border-radius: var(--radius); border-left: 5px solid;
+}
+.verdict strong { font-size: 17px; }
+.verdict span { font-size: 13px; opacity: .85; }
+.verdict--ok    { background: var(--ok-bg);    border-color: var(--ok);    color: var(--ok); }
+.verdict--warn  { background: var(--warn-bg);  border-color: var(--warn);  color: var(--warn); }
+.verdict--error { background: var(--error-bg); border-color: var(--error); color: var(--error); }
+
+.flash { padding: 12px 16px; border-radius: 6px; margin: 0 0 16px; }
+.flash--ok    { background: var(--ok-bg);    color: var(--ok); }
+.flash--error { background: var(--error-bg); color: var(--error); }
+
+/* -------------------------------------------------------------- tabelas */
+
+.scroll { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+
+.files-table th {
+  text-align: left; padding: 8px 10px; white-space: nowrap;
+  background: var(--brand); color: var(--brand-ink); font-size: 12px;
+}
+.files-table td { padding: 7px 10px; border-bottom: 1px solid var(--border); }
+.files-table tbody tr:nth-child(even) td { background: #fafbfc; }
+.file-name { font-family: var(--font-mono); font-size: 12px; word-break: break-all; }
+.files-table .num { text-align: right; white-space: nowrap; }
+.files-table th.num { text-align: right; }
+.files-table .item-index { width: 34px; color: var(--ink-soft);
+                           font-variant-numeric: tabular-nums; }
+.files-table tfoot td { font-weight: 700; border-top: 2px solid var(--border); border-bottom: 0; }
+.files-table tfoot tr td { background: var(--surface); }
+
+.shrank { color: var(--ok); font-weight: 600; }
+.grew   { color: var(--warn); font-weight: 600; }
+
+.error-message { font-size: 15px; margin: 0 0 10px; }
+.error-hint { font-family: var(--font-mono); font-size: 12.5px; white-space: pre-wrap;
+              margin: 0; color: var(--ink-soft); }
+
+/* -------------------------------------------------------------- rodapé */
+
+.footer { max-width: var(--width); margin: 0 auto; padding: 0 24px 32px;
+          font-size: 12px; color: var(--ink-soft); }
+.footer p { margin: 0; }
+/* O crédito é uma linha a menos que a nota: presente para quem procurar,
+   invisível para quem não estiver procurando. */
+.footer .footer-credit { margin-top: 6px; font-size: 11.5px; opacity: .7; }
+.footer-link { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+.footer-link:hover { color: var(--brand-light); }
+
+@media (max-width: 640px) {
+  .actions--save { flex-direction: column; align-items: stretch; }
+  .topbar-note { display: none; }
+}
+
+/* =========================================================================
+ * Daqui para baixo, o que só esta interface tem.
+ *
+ * O que está acima veio do ajeita-pdf sem uma linha de diferença, de
+ * propósito: são dois programas da mesma equipe, e uma correção de aparência
+ * feita lá deve poder ser copiada para cá sem conferir o que mudou no meio.
+ * O específico fica separado, no fim.
+ * ====================================================================== */
+
+/* ------------------------------------------------------- campo de links */
+
+textarea {
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: inherit;
+  resize: vertical;
+  min-height: 130px;
+}
+textarea:focus { outline: 2px solid var(--brand-light); outline-offset: 1px; }
+
+/* --------------------------------------------------------- o andamento */
+
+/* A barra é a única coisa desta tela que a pessoa olha por meia hora. Tudo
+   nela é grande e parado: o que se move é a largura da faixa e três números. */
+.progress { display: flex; flex-direction: column; gap: 10px; }
+
+.progress-title {
+  font-size: 16px; font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.progress-phase { font-size: 13px; color: var(--ink-soft); }
+
+.bar {
+  height: 12px; border-radius: 999px;
+  background: var(--bg); border: 1px solid var(--border);
+  overflow: hidden;
+}
+.bar-fill {
+  height: 100%; width: 0;
+  background: var(--brand-light);
+  /* Um pouco mais devagar que o intervalo da consulta, para a faixa deslizar
+     em vez de pular de degrau em degrau. */
+  transition: width .9s linear;
+}
+.bar-fill--unknown {
+  width: 100% !important;
+  background: repeating-linear-gradient(
+    90deg, var(--border) 0 12px, var(--bg) 12px 24px);
+}
+
+.metrics {
+  display: flex; gap: 18px; flex-wrap: wrap;
+  font-size: 13px; color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
+}
+.metrics b { color: var(--ink); font-variant-numeric: tabular-nums; }
+
+/* ------------------------------------------------------ o que já entrou */
+
+.items { list-style: none; margin: 0; padding: 0; max-height: 320px; overflow-y: auto;
+         border: 1px solid var(--border); border-radius: 6px; }
+.items:empty { display: none; }
+.items li {
+  display: flex; align-items: baseline; gap: 10px;
+  padding: 6px 10px; border-bottom: 1px solid var(--border); font-size: 13px;
+}
+.items li:last-child { border-bottom: 0; }
+.item-position { color: var(--ink-soft); font-size: 12px; min-width: 30px;
+                font-variant-numeric: tabular-nums; }
+.item-title { flex: 1; overflow-wrap: anywhere; }
+.item-target { font-size: 11px; color: var(--ink-soft); }
+.item-error { color: var(--error); }
+
+.empty { color: var(--ink-soft); font-size: 13px; margin: 0; }
+
+/* ------------------------------------------------------------- o registro */
+
+.log {
+  margin: 0; max-height: 220px; overflow-y: auto;
+  font-family: var(--font-mono); font-size: 12px; line-height: 1.45;
+  color: var(--ink-soft); white-space: pre-wrap; word-break: break-word;
+}
+
+/* --------------------------------------------------------------- estados */
+
+.badge {
+  display: inline-block; padding: 2px 9px; border-radius: 999px;
+  font-size: 12px; font-weight: 600;
+  background: var(--bg); color: var(--ink-soft);
+}
+.badge--downloading { background: var(--warn-bg); color: var(--warn); }
+.badge--done { background: var(--ok-bg); color: var(--ok); }
+.badge--cancelled, .badge--failed { background: var(--error-bg); color: var(--error); }
+
+.warning {
+  display: flex; gap: 10px; align-items: flex-start;
+  padding: 12px 16px; border-radius: 6px; margin: 0 0 16px;
+  background: var(--warn-bg); color: var(--warn); font-size: 13px;
+}
+.warning code { font-family: var(--font-mono); }

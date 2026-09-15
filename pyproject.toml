@@ -1,7 +1,7 @@
 [project]
 name = "youtube-downloader"
-version = "0.2.0"
-description = "Baixa listas de videos do YouTube (arquivo .txt) em MP4 e/ou MP3"
+version = "0.3.0"
+description = "Baixa videos e playlists do YouTube em MP4 e/ou MP3 — pelo navegador ou pela linha de comando"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
@@ -10,9 +10,16 @@ dependencies = [
 ]
 
 [dependency-groups]
+# A interface de navegador é OPCIONAL: quem usa só o terminal não precisa de um
+# servidor web instalado para baixar um vídeo. O `executar\instalar.bat`
+# instala este grupo, porque quem chega pelo duplo clique vem pela tela.
+interface = [
+    "flask>=3.0,<4.0",
+]
 dev = [
     "pytest>=8.3",
     "ruff>=0.6",
+    {include-group = "interface"},
 ]
 
 [tool.pytest.ini_options]
