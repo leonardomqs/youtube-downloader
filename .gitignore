@@ -15,4 +15,21 @@ wheels/
 
 # Saida do downloader
 downloads/
+
+# O historico e um arquivo por formato: --archive lista.txt gera lista.mp4.txt
+# e lista.mp3.txt. O nome da base e escolha de quem roda, entao o padrao pega
+# o sufixo, e nao "baixados".
 baixados*.txt
+*.mp3.txt
+*.mp4.txt
+
+# Downloads interrompidos: o yt-dlp deixa estes ao lado do arquivo final ate
+# terminar, e eles sobram quando a rodada e cancelada.
+*.part
+*.part-Frag*
+*.ytdl
+
+# Rascunho da mensagem de commit. Fica no disco, fora do versionamento: e um
+# bilhete para escrever o commit, nao parte do programa. Mesmo padrao do
+# ajeita-pdf.
+_commit*.txt
