@@ -144,7 +144,10 @@ class Run(service.Observer):
             self.error = reason
 
     def cancel(self) -> None:
-        """Pede parada. O serviço interrompe no próximo pedaço de arquivo."""
+        """Pede parada. O serviço interrompe no próximo pedaço de arquivo.
+
+        Uma live ainda junta o que foi gravado antes de a rodada acabar.
+        """
         self._stop.set()
         self.log("interrompendo a pedido...")
 

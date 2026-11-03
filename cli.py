@@ -9,6 +9,7 @@ Uso:
     uv run main.py links.txt --format both -o saida
     uv run main.py https://youtu.be/jNQXAC9IVRw --format mp3
     uv run main.py playlists.txt --playlist --playlist-items 1-10
+    uv run main.py https://youtu.be/AO_VIVO --live-from-start
 """
 
 from __future__ import annotations
@@ -16,6 +17,7 @@ from __future__ import annotations
 import argparse
 import dataclasses
 import functools
+import signal
 import sys
 from pathlib import Path
 
@@ -39,6 +41,23 @@ class Terminal(service.Observer):
     saem do yt-dlp direto no console — recolhê-los para redesenhar aqui seria
     reimplementar o que ele faz melhor.
     """
+
+    def __init__(self) -> None:
+        self.stop_requested = False
+
+    def should_stop(self) -> bool:
+        return self.stop_requested
+
+    def finish_recording(self, signum=None, frame=None) -> None:
+        """Ctrl+C numa rodada de lives: guarda o que veio; o segundo sai na hora."""
+        if self.stop_requested:
+            raise KeyboardInterrupt
+        self.stop_requested = True
+        print(
+            "\nEncerrando e guardando o que já foi gravado... (Ctrl+C de novo sai sem esperar)",
+            file=sys.stderr,
+            flush=True,
+        )
 
     def link_started(self, index: int, total: int, url: str, target: str) -> None:
         print(f"\n[{target.upper()} {index}/{total}] {url}", flush=True)
@@ -136,6 +155,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         dest="playlist_folder",
         action="store_false",
         help="não cria uma subpasta com o nome da playlist",
+    )
+    parser.add_argument(
+        "--live-from-start",
+        action="store_true",
+        help="baixa a live desde o começo e segue gravando até ela acabar "
+        "(YouTube, Twitch, TVer e mellow-fan). Ctrl+C encerra e guarda o que veio",
     )
     parser.add_argument(
         "--archive",
@@ -263,7 +288,10 @@ def main(argv: list[str] | None = None) -> int:
     prefix = "[simulação] " if options.dry_run else ""
     print(f"{prefix}{len(links)} link(s) ({mode}) -> {', '.join(options.targets)}")
 
-    results = service.run(links, options, Terminal())
+    terminal = Terminal()
+    if options.live_from_start:
+        signal.signal(signal.SIGINT, terminal.finish_recording)
+    results = service.run(links, options, terminal)
     return print_summary(results, options)
 
 

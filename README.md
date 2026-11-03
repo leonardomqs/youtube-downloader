@@ -45,6 +45,7 @@ Uma página abre em `http://127.0.0.1:5300`. Nela:
 - **Ver o que será baixado** — lista os vídeos, numerados e na ordem, sem baixar nada. É o `--dry-run` com botão.
 - **Acompanhar** — barra de progresso, velocidade, tempo restante, o que já entrou e o que falhou. Inclusive durante a conversão para MP3, que é a parte em que a barra pareceria travada.
 - **Parar** — interrompe no meio do arquivo, sem esperar o vídeo terminar.
+- **Transmissões ao vivo** — marque a opção para baixar a live desde o início, alcançar o ponto atual e seguir gravando. Ver [Lives](#lives).
 
 Uma rodada por vez: o yt-dlp já baixa fragmentos em paralelo, e dois downloads simultâneos só dividiriam a mesma banda.
 
@@ -126,6 +127,21 @@ Um link de vídeo com `&list=...` baixa **só aquele vídeo** por padrão; use `
 
 Vídeos indisponíveis (privados, removidos, com restrição regional) **não interrompem a playlist** — os demais continuam e o resumo final mostra o que falhou.
 
+## Lives
+
+Um link de live é gravado do momento atual até ela acabar. Com `--live-from-start` (ou a opção na interface), o programa baixa desde o início, alcança o ponto atual e segue gravando:
+
+```bash
+uv run main.py https://youtu.be/AO_VIVO --live-from-start
+```
+
+- **Só YouTube, Twitch, TVer e mellow-fan**, e o yt-dlp ainda marca como experimental. Em outro site o link falha com um aviso; sem a opção, ele grava a partir de agora. Vídeos comuns na mesma rodada não mudam.
+- **No YouTube**, volta no máximo 120 horas.
+- **Para parar**, use **Parar** na interface ou Ctrl+C no terminal: o que já veio vira um arquivo normal. O segundo Ctrl+C sai sem esperar. Parar encerra a rodada: a passada de MP3 de `--format both` e os links seguintes não rodam, e a gravação parcial não entra no histórico.
+- **Um fragmento por vez**: nesse modo o `-j` é ignorado, para que parar não dependa de baixar a fila inteira de trechos.
+- **`--format both`** grava o MP4 até a live acabar e só então busca o MP3.
+- **Sem a opção**, o Parar da interface não alcança a gravação: quem grava é o ffmpeg, e ele não dá notícias até terminar.
+
 ## Histórico (`--archive`)
 
 O histórico guarda os vídeos já baixados para não repeti-los na próxima rodada. Como ele registra só o id do vídeo, **cada formato tem o seu arquivo**: `--archive baixados.txt` cria `baixados.mp4.txt` e `baixados.mp3.txt`. Sem isso, em `--format both` o MP3 pularia tudo o que o MP4 acabou de registrar.
@@ -145,6 +161,7 @@ O que foi pulado aparece no resumo como *já no histórico* — não conta como 
 | `--playlist-items 1-10` | Quais itens baixar (ex.: `1-10`, `5,7`, `20-`) |
 | `--playlist-reverse` | Baixa a playlist do fim para o começo |
 | `--no-playlist-folder` | Não cria a subpasta com o nome da playlist |
+| `--live-from-start` | Baixa a live desde o início e segue gravando até ela acabar |
 | `--archive baixados.txt` | Guarda o histórico e não baixa de novo o que já foi baixado |
 | `-j, --concurrent-fragments 4` | Fragmentos baixados em paralelo por vídeo (`1` desliga) |
 | `--limit-rate 2M` | Limita a velocidade de download |

@@ -127,3 +127,20 @@ def test_summary_of_a_simulation_speaks_in_the_future(tmp_path: Path, capsys):
     cli.print_summary(results, service.Options(output=tmp_path, dry_run=True))
 
     assert "4 vídeo(s) a baixar" in capsys.readouterr().out
+
+
+def test_live_from_start_reaches_the_options():
+    assert cli.options_from(cli.parse_args(["links.txt", "--live-from-start"])).live_from_start
+    assert not cli.options_from(cli.parse_args(["links.txt"])).live_from_start
+
+
+def test_the_first_ctrl_c_finishes_the_recording_and_the_second_leaves(capsys):
+    terminal = cli.Terminal()
+    assert not terminal.should_stop()
+
+    terminal.finish_recording()
+
+    assert terminal.should_stop()
+    assert "guardando" in capsys.readouterr().err
+    with pytest.raises(KeyboardInterrupt):
+        terminal.finish_recording()

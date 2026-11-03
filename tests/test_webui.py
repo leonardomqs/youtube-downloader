@@ -276,3 +276,30 @@ def test_opening_a_folder_only_accepts_a_target_of_the_run(app, tmp_path: Path, 
     # mp3 não faz parte desta rodada: a rota não abre pasta que não é dela.
     client.post(f"/run/{run.id}/open/mp3")
     assert opened == [tmp_path / "mp4"]
+
+
+def test_the_form_turns_on_live_from_start(app, tmp_path: Path):
+    client = app.test_client()
+    form = {"links": "https://youtu.be/a", "output": str(tmp_path), "action": "download"}
+
+    client.post("/download", data={**form, "live_from_start": "on"})
+    registry = app.config["RUNS"]
+    run = registry.all()[0]
+    assert wait_for(lambda: run.is_over)
+    assert run.options.live_from_start
+
+    client.post("/download", data=form)
+    run = registry.all()[0]
+    assert wait_for(lambda: run.is_over)
+    assert not run.options.live_from_start
+
+
+def test_the_status_says_when_it_is_recording(app, tmp_path: Path):
+    from webui import routes
+
+    run = app.config["RUNS"].open(["https://youtu.be/a"], service.Options(output=tmp_path))
+    assert wait_for(lambda: run.is_over)
+
+    assert routes._status(run)["recording"] is False
+    run.current.phase = service.RECORDING
+    assert routes._status(run)["recording"] is True

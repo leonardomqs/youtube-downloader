@@ -43,6 +43,8 @@
     el("position").textContent = s.current_link
       ? ` · link ${s.current_link} de ${s.total_links}`
       : "";
+    // Numa live o total ainda não existe: uma porcentagem seria sempre zero.
+    el("percent-box").hidden = s.recording;
     el("percent").textContent = s.percent;
     el("speed").textContent = s.speed;
     el("eta").textContent = s.eta ? "faltam " + s.eta : "";
@@ -97,7 +99,7 @@
     // O andamento na aba, para quem deixa a página em segundo plano.
     document.title = s.is_over
       ? `${s.state_label} · youtube-downloader`
-      : `${Math.round(s.percent)}% · ${s.title || "baixando"}`;
+      : `${s.recording ? s.phase : Math.round(s.percent) + "%"} · ${s.title || "baixando"}`;
   }
 
   el("stop").addEventListener("click", async () => {

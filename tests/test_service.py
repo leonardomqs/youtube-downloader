@@ -438,6 +438,115 @@ def test_a_cancelled_run_does_not_move_on_to_the_next_format(monkeypatch):
     assert results["mp4"].cancelled
 
 
+# -------------------------------------------------------------------- lives
+
+
+class Stoppable(service.Observer):
+    def __init__(self, stop=True):
+        self.stop = stop
+        self.progressed = []
+
+    def should_stop(self):
+        return self.stop
+
+    def progress(self, p):
+        self.progressed.append(p.phase)
+
+
+def test_live_from_start_is_off_by_default():
+    assert "live_from_start" not in service.ydl_options(Options(), "mp4")
+
+
+def test_live_from_start_reaches_ytdlp_one_fragment_at_a_time():
+    opts = service.ydl_options(Options(live_from_start=True, concurrent_fragments=8), "mp4")
+
+    assert opts["live_from_start"] is True
+    assert opts["concurrent_fragment_downloads"] == 1
+
+
+def test_the_fragments_of_a_live_end_when_someone_stops():
+    wanted = {"stop": False}
+
+    def fragments(ctx):
+        for index in range(10):
+            if index == 3:
+                wanted["stop"] = True
+            yield index
+
+    generate = service._until_stopped(fragments, lambda: wanted["stop"])
+
+    assert list(generate({})) == [0, 1, 2]
+
+
+def test_stopping_a_recording_does_not_raise_in_the_hooks():
+    observer = Stoppable()
+    opts = service.ydl_options(Options(live_from_start=True), "mp4", observer)
+    live = {"is_live": True, "title": "ao vivo"}
+
+    opts["progress_hooks"][0]({"status": "downloading", "info_dict": live})
+    opts["postprocessor_hooks"][0](
+        {"status": "started", "postprocessor": "FFmpegMerger", "info_dict": live}
+    )
+
+    assert observer.progressed == [service.RECORDING, "juntando vídeo e áudio"]
+
+
+def test_stopping_a_common_video_still_raises_with_the_option_on():
+    opts = service.ydl_options(Options(live_from_start=True), "mp4", Stoppable())
+
+    with pytest.raises(service.DownloadCancelled):
+        opts["progress_hooks"][0]({"status": "downloading", "info_dict": {"is_live": False}})
+
+
+def test_a_live_without_the_option_is_not_treated_as_a_recording():
+    opts = service.ydl_options(Options(), "mp4", Stoppable())
+
+    with pytest.raises(service.DownloadCancelled):
+        opts["progress_hooks"][0]({"status": "downloading", "info_dict": {"is_live": True}})
+
+
+def test_a_stopped_recording_counts_and_ends_the_round(monkeypatch):
+    monkeypatch.setattr(service, "Downloader", FakeDownloader([{"id": "a"}, {"id": "b"}]))
+
+    result = service.download(
+        ["https://youtu.be/a", "https://youtu.be/b"], Options(), "mp4", Stoppable()
+    )
+
+    assert result.downloaded == 1
+    assert result.cancelled
+
+
+def test_a_stopped_recording_does_not_start_the_mp3_pass(monkeypatch):
+    monkeypatch.setattr(service, "Downloader", FakeDownloader([{"id": "a"}, {"id": "a"}]))
+
+    results = service.run(["https://youtu.be/a"], Options(format="both", dry_run=True), Stoppable())
+
+    assert list(results) == ["mp4"]
+
+
+def test_a_link_without_the_live_start_says_what_to_do(monkeypatch):
+    error = "ERROR: [generic] x: --live-from-start is passed, but there are no formats"
+    monkeypatch.setattr(service, "Downloader", FakeDownloader([None], errors_per_link=[[error]]))
+
+    result = service.download(["https://site/x"], Options(live_from_start=True), "mp4")
+
+    assert [f.reason for f in result.failures] == [service.NO_LIVE_START_REASON]
+
+
+def test_a_stopped_recording_stays_out_of_the_archive(tmp_path: Path):
+    archive = tmp_path / "baixados.txt"
+    info = {"id": "abc", "extractor_key": "Youtube", "extractor": "youtube"}
+
+    with service.Downloader({"quiet": True, "download_archive": str(archive)}) as ydl:
+        ydl.stop_requested = lambda: True
+        ydl.record_download_archive(info)
+        assert not archive.exists()
+
+        ydl.stop_requested = lambda: False
+        ydl.record_download_archive(info)
+        assert "youtube abc" in archive.read_text(encoding="utf-8")
+
+
 # --------------------------------------------------------------- validações
 
 

@@ -86,8 +86,19 @@ PHASE_LABELS = {
 #: pelo código, porque são o que a tela escreve embaixo do título.
 PREPARING = "preparando"
 DOWNLOADING = "baixando"
+RECORDING = "gravando ao vivo"
 PROCESSING = "processando"
 FAILED = "erro"
+
+#: Trecho da mensagem do yt-dlp quando o link não oferece a live desde o início.
+#: É o que permite trocá-la por uma que diga o que fazer; se o yt-dlp mudar o
+#: texto, a mensagem original continua aparecendo.
+_NO_LIVE_START = "--live-from-start is passed"
+NO_LIVE_START_REASON = (
+    "Este link não pode ser baixado desde o início (só YouTube, Twitch, TVer e "
+    "mellow-fan oferecem isso). Desligue a opção de baixar a live desde o início "
+    "para gravar a partir de agora."
+)
 
 
 class InvalidInput(ValueError):
@@ -166,6 +177,7 @@ class Options:
     playlist_items: str | None = None
     playlist_reverse: bool = False
     playlist_folder: bool = True
+    live_from_start: bool = False
     archive: Path | None = None
     dry_run: bool = False
     concurrent_fragments: int = 4
@@ -270,12 +282,16 @@ class Downloader(YoutubeDL):
     Um item pulado pelo --archive volta como None no resultado, exatamente
     como um que falhou. Contar os pulados é o que permite separar os dois no
     resumo (sem isso, rodar de novo com histórico acusaria tudo como falha).
+
+    É aqui também que uma live para sem perder o que já veio: ver
+    `_until_stopped`.
     """
 
     def __init__(self, params=None, **kwargs):
         # Antes do super(): a inicialização do yt-dlp já pode reportar erro.
         self.errors: list[str] = []
         self.skipped = 0
+        self.stop_requested = lambda: False
         super().__init__(params, **kwargs)
 
     def report_error(self, message, *args, **kwargs):
@@ -289,6 +305,37 @@ class Downloader(YoutubeDL):
         if skipped:
             self.skipped += 1
         return skipped
+
+    def process_info(self, info_dict):
+        if self.stop_requested():
+            raise DownloadCancelled("interrompido a pedido")
+        # Vídeo e som são dois formatos, cada um com a sua sequência de trechos.
+        for fmt in info_dict.get("requested_formats") or [info_dict]:
+            if callable(fmt.get("fragments")):
+                fmt["fragments"] = _until_stopped(fmt["fragments"], self.stop_requested)
+        return super().process_info(info_dict)
+
+    def record_download_archive(self, info_dict):
+        # Uma gravação interrompida não é o vídeo inteiro.
+        if not self.stop_requested():
+            super().record_download_archive(info_dict)
+
+
+def _until_stopped(fragments, should_stop):
+    """Os trechos de uma live, até alguém pedir para parar.
+
+    Interromper com exceção deixaria vídeo e som em arquivos `.part` soltos. Uma
+    sequência que acaba é o que o yt-dlp vê quando a live termina: ele fecha os
+    arquivos, junta e pós-processa o que já veio.
+    """
+
+    def generate(ctx):
+        for fragment in fragments(ctx):
+            if should_stop():
+                return
+            yield fragment
+
+    return generate
 
 
 # --------------------------------------------------------------- ambiente
@@ -442,6 +489,11 @@ def ydl_options(options: Options, target: str, observer: Observer | None = None)
     }
     if ffmpeg_dir:
         opts["ffmpeg_location"] = ffmpeg_dir
+    if options.live_from_start:
+        opts["live_from_start"] = True
+        # Em paralelo, o yt-dlp pede todos os trechos que existem de uma vez e
+        # só grava no fim: parar durante o atraso esperaria baixar a fila toda.
+        opts["concurrent_fragment_downloads"] = 1
     if options.playlist_items:
         opts["playlist_items"] = options.playlist_items
     if options.playlist_reverse:
@@ -512,22 +564,27 @@ def _hooks(options: Options, target: str, observer: Observer) -> dict:
     #: isto ele apareceria duas vezes na lista da tela.
     announced: set[str] = set()
 
-    def stop_if_asked() -> None:
-        if observer.should_stop():
+    def recording(info: dict) -> bool:
+        return options.live_from_start and bool(info.get("is_live"))
+
+    def stop_if_asked(info: dict) -> None:
+        # Uma gravação para pelo fim dos trechos (`_until_stopped`) e ainda
+        # precisa terminar a junção; a exceção aqui jogaria isso fora.
+        if observer.should_stop() and not recording(info):
             # O yt-dlp trata esta exceção como fim de rodada, não como erro do
             # vídeo: é a forma suportada de interromper no meio de um fragmento.
             raise DownloadCancelled("interrompido a pedido")
 
     def on_download(d: dict) -> None:
-        stop_if_asked()
         info = d.get("info_dict") or {}
+        stop_if_asked(info)
         state.title = info.get("title") or state.title
         status = d.get("status")
 
         if status == "downloading":
             total = d.get("total_bytes") or d.get("total_bytes_estimate") or 0
             done = d.get("downloaded_bytes") or 0
-            state.phase = DOWNLOADING
+            state.phase = RECORDING if recording(info) else DOWNLOADING
             state.percent = (done / total * 100) if total else 0.0
             state.speed = d.get("speed") or 0.0
             state.eta = d.get("eta")
@@ -554,7 +611,7 @@ def _hooks(options: Options, target: str, observer: Observer) -> dict:
         observer.progress(state)
 
     def on_postprocessing(d: dict) -> None:
-        stop_if_asked()
+        stop_if_asked(d.get("info_dict") or {})
         name = d.get("postprocessor") or ""
         if d.get("status") == "started":
             state.phase = PHASE_LABELS.get(name, PROCESSING)
@@ -645,6 +702,7 @@ def download(
     opts = ydl_options(options, target, collector)
 
     with Downloader(opts) as ydl:
+        ydl.stop_requested = collector.should_stop
         for i, link in enumerate(links, start=1):
             observer.link_started(i, total, link, target)
             ydl.errors.clear()
@@ -670,7 +728,7 @@ def download(
 
             if bad or (ok == 0 and already == 0):
                 for reason in ydl.errors or ["motivo desconhecido"]:
-                    collector.failure(Failure(link, reason))
+                    collector.failure(Failure(link, _explain(reason)))
 
             if options.dry_run:
                 _announce_simulated(info, target, collector)
@@ -680,7 +738,18 @@ def download(
                 playlist = info.get("title") or "playlist"
             collector.link_finished(link, ok, already, bad, playlist)
 
+            # Uma gravação parada volta como um download normal: é aqui que a
+            # rodada fica sabendo que não deve seguir para o próximo link.
+            if collector.should_stop():
+                result.cancelled = True
+                break
+
     return result
+
+
+def _explain(reason: str) -> str:
+    """Troca por uma instrução o erro que depende de uma opção desta rodada."""
+    return NO_LIVE_START_REASON if _NO_LIVE_START in reason else reason
 
 
 def _announce_simulated(info, target: str, observer: Observer) -> None:
