@@ -301,5 +301,16 @@ def test_the_status_says_when_it_is_recording(app, tmp_path: Path):
     assert wait_for(lambda: run.is_over)
 
     assert routes._status(run)["recording"] is False
+    run.state = "downloading"
     run.current.phase = service.RECORDING
     assert routes._status(run)["recording"] is True
+
+
+def test_a_finished_run_shows_no_phase(app, tmp_path: Path):
+    from webui import routes
+
+    run = app.config["RUNS"].open(["https://youtu.be/a"], service.Options(output=tmp_path))
+    assert wait_for(lambda: run.is_over)
+    run.current.phase = "guardando na pasta"
+
+    assert routes._status(run)["phase"] == ""

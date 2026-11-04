@@ -360,3 +360,7 @@ textarea:focus { outline: 2px solid var(--brand-light); outline-offset: 1px; }
   background: var(--warn-bg); color: var(--warn); font-size: 13px;
 }
 .warning code { font-family: var(--font-mono); }
+
+/* O `display` de .button venceria o atributo `hidden` e deixaria o Parar na tela
+   depois do fim da rodada. */
+.button[hidden] { display: none; }

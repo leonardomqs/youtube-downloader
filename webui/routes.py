@@ -259,6 +259,9 @@ def _status(r) -> dict:
     s = r.snapshot()
     now = s["current"]
     options = s["options"]
+    # A última fase descreve um trabalho que já acabou; quem diz como terminou é o
+    # estado da rodada.
+    phase = "" if s["is_over"] else now.phase
 
     return {
         "id": s["id"],
@@ -266,11 +269,11 @@ def _status(r) -> dict:
         "state_label": STATE_LABELS.get(s["state"], s["state"]),
         "is_over": s["is_over"],
         "simulation": s["dry_run"],
-        "phase": now.phase,
+        "phase": phase,
         "title": now.title,
         "target": now.target.upper(),
         "percent": round(now.percent, 1),
-        "recording": now.phase == service.RECORDING,
+        "recording": phase == service.RECORDING,
         "speed": _speed(now.speed),
         "eta": _duration(now.eta),
         "current_link": now.current_link,
