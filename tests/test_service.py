@@ -10,6 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from yt_dlp import YoutubeDL
 
 import service
 from service import InvalidInput, Options
@@ -545,6 +546,120 @@ def test_a_stopped_recording_stays_out_of_the_archive(tmp_path: Path):
         ydl.stop_requested = lambda: False
         ydl.record_download_archive(info)
         assert "youtube abc" in archive.read_text(encoding="utf-8")
+
+
+def fake_clock(monkeypatch, start=1000.0):
+    """Um relógio que anda só no `sleep`: a espera de minutos passa num instante."""
+    now = {"t": start}
+    monkeypatch.setattr(service.time, "time", lambda: now["t"])
+    monkeypatch.setattr(service.time, "sleep", lambda s: now.__setitem__("t", now["t"] + s))
+    return now
+
+
+UPCOMING = {"title": "Agendada", "live_status": "is_upcoming"}
+
+
+def test_waiting_is_off_by_default_and_in_a_simulation():
+    assert "wait_for_video" not in service.ydl_options(Options(), "mp4")
+    simulated = service.ydl_options(Options(wait_for_live=True, dry_run=True), "mp4")
+    assert "wait_for_video" not in simulated
+
+
+def test_waiting_reaches_ytdlp():
+    opts = service.ydl_options(Options(wait_for_live=True), "mp4")
+
+    assert opts["wait_for_video"] == (service.WAIT_MIN, service.WAIT_MAX)
+
+
+@pytest.mark.parametrize(
+    ("starts_in", "expected"),
+    [
+        (None, service.WAIT_MIN),
+        (-500, service.WAIT_MIN),
+        (90, 90),
+        (9000, service.WAIT_MAX),
+    ],
+)
+def test_the_next_check_follows_the_schedule(starts_in, expected):
+    assert service.next_live_check(starts_in) == expected
+
+
+def test_ytdlp_still_has_the_wait_this_program_replaces():
+    assert callable(YoutubeDL._wait_for_video)
+
+
+@pytest.mark.parametrize(
+    "info",
+    [
+        {"title": "Com formatos", "live_status": "is_upcoming", "formats": [{}]},
+        {"title": "Acabou", "live_status": "was_live"},
+        {"title": "Indisponível", "live_status": "not_live"},
+    ],
+)
+def test_only_what_is_still_to_start_waits(monkeypatch, info):
+    fake_clock(monkeypatch)
+
+    with service.Downloader({"quiet": True, "wait_for_video": (60, 300)}) as ydl:
+        assert ydl._wait_for_video(info) is None
+
+
+def test_the_wait_tells_how_long_and_then_checks_again(monkeypatch):
+    now = fake_clock(monkeypatch)
+    heard = []
+
+    with service.Downloader({"quiet": True, "wait_for_video": (60, 300)}) as ydl:
+        ydl.on_waiting = lambda title, starts_in: heard.append((title, starts_in))
+        with pytest.raises(service.ReExtractInfo):
+            ydl._wait_for_video({**UPCOMING, "release_timestamp": now["t"] + 9000})
+
+    assert heard[0] == ("Agendada", 9000.0)
+    assert len(heard) == service.WAIT_MAX
+
+
+def test_the_wait_without_a_known_time_also_checks_again(monkeypatch):
+    fake_clock(monkeypatch)
+
+    with (
+        service.Downloader({"quiet": True, "wait_for_video": (60, 300)}) as ydl,
+        pytest.raises(service.ReExtractInfo),
+    ):
+        ydl._wait_for_video({"title": "Twitch sem live"})
+
+
+def test_stopping_ends_the_wait(monkeypatch):
+    fake_clock(monkeypatch)
+    calls = []
+
+    with service.Downloader({"quiet": True, "wait_for_video": (60, 300)}) as ydl:
+        ydl.stop_requested = lambda: len(calls) >= 3
+        ydl.on_waiting = lambda title, starts_in: calls.append(starts_in)
+        with pytest.raises(service.DownloadCancelled):
+            ydl._wait_for_video(UPCOMING)
+
+    assert len(calls) == 3
+
+
+def test_the_wait_reaches_the_observer_as_progress(monkeypatch):
+    class Waiting(FakeDownloader):
+        def extract_info(self, link, download=True):
+            self.on_waiting("Agendada", 125.7)
+            self.on_waiting("Agendada", -3)
+            return super().extract_info(link, download)
+
+    class Watcher(service.Observer):
+        seen = []
+
+        def progress(self, p):
+            self.seen.append((p.phase, p.title, p.eta))
+
+    monkeypatch.setattr(service, "Downloader", Waiting([{"id": "a"}]))
+
+    service.download(["https://youtu.be/a"], Options(), "mp4", Watcher())
+
+    assert Watcher.seen == [
+        (service.WAITING, "Agendada", 125),
+        (service.WAITING, "Agendada", None),
+    ]
 
 
 # --------------------------------------------------------------- validações

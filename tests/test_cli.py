@@ -144,3 +144,18 @@ def test_the_first_ctrl_c_finishes_the_recording_and_the_second_leaves(capsys):
     assert "guardando" in capsys.readouterr().err
     with pytest.raises(KeyboardInterrupt):
         terminal.finish_recording()
+
+
+def test_wait_for_live_reaches_the_options():
+    assert cli.options_from(cli.parse_args(["links.txt", "--wait-for-live"])).wait_for_live
+    assert not cli.options_from(cli.parse_args(["links.txt"])).wait_for_live
+
+
+def test_the_terminal_announces_each_wait_once(capsys):
+    terminal = cli.Terminal()
+    waiting = service.Progress(phase=service.WAITING, title="Agendada")
+
+    terminal.progress(waiting)
+    terminal.progress(waiting)
+
+    assert capsys.readouterr().out.count("Agendada") == 1

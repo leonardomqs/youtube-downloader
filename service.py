@@ -28,12 +28,13 @@ import functools
 import os
 import re
 import shutil
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from yt_dlp import YoutubeDL
 from yt_dlp.cookies import SUPPORTED_BROWSERS, SUPPORTED_KEYRINGS
-from yt_dlp.utils import DownloadCancelled, parse_bytes
+from yt_dlp.utils import DownloadCancelled, ReExtractInfo, parse_bytes
 
 __all__ = [
     "FORMATS",
@@ -87,8 +88,18 @@ PHASE_LABELS = {
 PREPARING = "preparando"
 DOWNLOADING = "baixando"
 RECORDING = "gravando ao vivo"
+WAITING = "aguardando a live começar"
 PROCESSING = "processando"
 FAILED = "erro"
+
+#: Fases sem total conhecido: uma porcentagem nelas seria sempre zero.
+OPEN_ENDED_PHASES = (RECORDING, WAITING)
+
+#: De quantos em quantos segundos conferir se uma live agendada começou. Até o
+#: horário previsto vale o intervalo maior, porque a live pode ser antecipada;
+#: passado o horário, o menor, porque ela deve abrir a qualquer momento.
+WAIT_MIN = 60
+WAIT_MAX = 300
 
 #: Trecho da mensagem do yt-dlp quando o link não oferece a live desde o início.
 #: É o que permite trocá-la por uma que diga o que fazer; se o yt-dlp mudar o
@@ -178,6 +189,7 @@ class Options:
     playlist_reverse: bool = False
     playlist_folder: bool = True
     live_from_start: bool = False
+    wait_for_live: bool = False
     archive: Path | None = None
     dry_run: bool = False
     concurrent_fragments: int = 4
@@ -292,6 +304,7 @@ class Downloader(YoutubeDL):
         self.errors: list[str] = []
         self.skipped = 0
         self.stop_requested = lambda: False
+        self.on_waiting = lambda title, starts_in: None
         super().__init__(params, **kwargs)
 
     def report_error(self, message, *args, **kwargs):
@@ -315,10 +328,44 @@ class Downloader(YoutubeDL):
                 fmt["fragments"] = _until_stopped(fmt["fragments"], self.stop_requested)
         return super().process_info(info_dict)
 
+    def _wait_for_video(self, ie_result=None):
+        """A espera por uma live agendada, trocada por uma que escuta o Parar.
+
+        A do yt-dlp é uma pausa que não chama gancho nenhum, e uma live que atrasa
+        ou nunca começa prenderia a rodada sem saída. Ela também espera por
+        qualquer vídeo sem formatos, e este aqui só pelo que ainda vai começar:
+        um vídeo indisponível precisa falhar, não ficar em espera para sempre.
+        """
+        ie_result = ie_result or {}
+        if (
+            not self.params.get("wait_for_video")
+            or ie_result.get("_type", "video") != "video"
+            or ie_result.get("formats")
+            or ie_result.get("url")
+            or (ie_result.get("live_status") or "is_upcoming") != "is_upcoming"
+        ):
+            return
+
+        start = ie_result.get("release_timestamp")
+        starts_in = start - time.time() if start else None
+        next_check = time.time() + next_live_check(starts_in)
+        while time.time() < next_check:
+            if self.stop_requested():
+                raise DownloadCancelled("interrompido a pedido")
+            starts_in = start - time.time() if start else None
+            self.on_waiting(ie_result.get("title") or "", starts_in)
+            time.sleep(1)
+        raise ReExtractInfo("[wait] conferindo se a live começou", expected=True)
+
     def record_download_archive(self, info_dict):
         # Uma gravação interrompida não é o vídeo inteiro.
         if not self.stop_requested():
             super().record_download_archive(info_dict)
+
+
+def next_live_check(starts_in: float | None) -> float:
+    """Quantos segundos esperar até conferir de novo. `starts_in` pode ser negativo."""
+    return min(max(starts_in or 0, WAIT_MIN), WAIT_MAX)
 
 
 def _until_stopped(fragments, should_stop):
@@ -494,6 +541,10 @@ def ydl_options(options: Options, target: str, observer: Observer | None = None)
         # Em paralelo, o yt-dlp pede todos os trechos que existem de uma vez e
         # só grava no fim: parar durante o atraso esperaria baixar a fila toda.
         opts["concurrent_fragment_downloads"] = 1
+    # A simulação responde agora o que existe agora: esperar uma live que começa
+    # em dois dias não é listar nada.
+    if options.wait_for_live and not options.dry_run:
+        opts["wait_for_video"] = (WAIT_MIN, WAIT_MAX)
     if options.playlist_items:
         opts["playlist_items"] = options.playlist_items
     if options.playlist_reverse:
@@ -703,6 +754,12 @@ def download(
 
     with Downloader(opts) as ydl:
         ydl.stop_requested = collector.should_stop
+
+        def waiting(title: str, starts_in: float | None) -> None:
+            eta = int(starts_in) if starts_in and starts_in > 0 else None
+            collector.progress(Progress(phase=WAITING, title=title, eta=eta, target=target))
+
+        ydl.on_waiting = waiting
         for i, link in enumerate(links, start=1):
             observer.link_started(i, total, link, target)
             ydl.errors.clear()

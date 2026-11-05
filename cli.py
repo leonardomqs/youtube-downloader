@@ -10,6 +10,7 @@ Uso:
     uv run main.py https://youtu.be/jNQXAC9IVRw --format mp3
     uv run main.py playlists.txt --playlist --playlist-items 1-10
     uv run main.py https://youtu.be/AO_VIVO --live-from-start
+    uv run main.py https://youtu.be/AGENDADA --wait-for-live --live-from-start
 """
 
 from __future__ import annotations
@@ -44,6 +45,7 @@ class Terminal(service.Observer):
 
     def __init__(self) -> None:
         self.stop_requested = False
+        self.waiting_for = None
 
     def should_stop(self) -> bool:
         return self.stop_requested
@@ -58,6 +60,12 @@ class Terminal(service.Observer):
             file=sys.stderr,
             flush=True,
         )
+
+    def progress(self, p: service.Progress) -> None:
+        # A espera pode durar dias sem nenhuma outra saída; uma linha por live basta.
+        if p.phase == service.WAITING and p.title != self.waiting_for:
+            self.waiting_for = p.title
+            print(f"  {service.WAITING}: {p.title} (Ctrl+C desiste)", flush=True)
 
     def link_started(self, index: int, total: int, url: str, target: str) -> None:
         print(f"\n[{target.upper()} {index}/{total}] {url}", flush=True)
@@ -161,6 +169,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="baixa a live desde o começo e segue gravando até ela acabar "
         "(YouTube, Twitch, TVer e mellow-fan). Ctrl+C encerra e guarda o que veio",
+    )
+    parser.add_argument(
+        "--wait-for-live",
+        action="store_true",
+        help="se a live ainda não começou, espera por ela em vez de falhar. "
+        "Use junto com --live-from-start para não perder o começo",
     )
     parser.add_argument(
         "--archive",
@@ -289,7 +303,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"{prefix}{len(links)} link(s) ({mode}) -> {', '.join(options.targets)}")
 
     terminal = Terminal()
-    if options.live_from_start:
+    if options.live_from_start or options.wait_for_live:
         signal.signal(signal.SIGINT, terminal.finish_recording)
     results = service.run(links, options, terminal)
     return print_summary(results, options)

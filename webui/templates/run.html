@@ -47,7 +47,7 @@
       </div>
 
       <div class="metrics">
-        <span id="percent-box" {{ 'hidden' if status.recording }}><b id="percent">{{ status.percent }}</b>%</span>
+        <span id="percent-box" {{ 'hidden' if status.open_ended }}><b id="percent">{{ status.percent }}</b>%</span>
         <span id="speed">{{ status.speed }}</span>
         <span id="eta">{{ 'faltam ' + status.eta if status.eta }}</span>
       </div>

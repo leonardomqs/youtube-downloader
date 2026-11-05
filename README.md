@@ -45,7 +45,7 @@ Uma página abre em `http://127.0.0.1:5300`. Nela:
 - **Ver o que será baixado** — lista os vídeos, numerados e na ordem, sem baixar nada. É o `--dry-run` com botão.
 - **Acompanhar** — barra de progresso, velocidade, tempo restante, o que já entrou e o que falhou. Inclusive durante a conversão para MP3, que é a parte em que a barra pareceria travada.
 - **Parar** — interrompe no meio do arquivo, sem esperar o vídeo terminar.
-- **Transmissões ao vivo** — marque a opção para baixar a live desde o início, alcançar o ponto atual e seguir gravando. Ver [Lives](#lives).
+- **Transmissões ao vivo** — baixar a live desde o início, alcançar o ponto atual e seguir gravando; e esperar uma live agendada começar. Ver [Lives](#lives).
 
 Uma rodada por vez: o yt-dlp já baixa fragmentos em paralelo, e dois downloads simultâneos só dividiriam a mesma banda.
 
@@ -142,6 +142,21 @@ uv run main.py https://youtu.be/AO_VIVO --live-from-start
 - **`--format both`** grava o MP4 até a live acabar e só então busca o MP3.
 - **Sem a opção**, o Parar da interface não alcança a gravação: quem grava é o ffmpeg, e ele não dá notícias até terminar.
 
+### Live agendada
+
+Com `--wait-for-live` (ou a opção na interface), um link de live que ainda não começou espera por ela em vez de falhar. A gravação começa sozinha e termina quando a live acabar:
+
+```bash
+uv run main.py https://youtu.be/AGENDADA --wait-for-live --live-from-start
+```
+
+- **Use as duas opções juntas.** O programa confere a cada 5 minutos até o horário previsto, e a cada minuto depois dele, então pode perceber o início com atraso. Com `--live-from-start`, esse atraso não perde nada, e o Parar funciona durante a gravação.
+- **A máquina precisa ficar ligada** até a live acabar. Se ela suspender, a espera para junto.
+- **Nada mais baixa durante a espera**: uma rodada por vez, e os links seguintes aguardam. Por isso a opção é para links de live, não para o canal inteiro.
+- **Parar** ou Ctrl+C desistem da espera.
+- **Se a internet cair** numa das conferências, o link falha e a rodada segue sem ele.
+- **`--dry-run`** não espera: mostra o que existe agora.
+
 ## Histórico (`--archive`)
 
 O histórico guarda os vídeos já baixados para não repeti-los na próxima rodada. Como ele registra só o id do vídeo, **cada formato tem o seu arquivo**: `--archive baixados.txt` cria `baixados.mp4.txt` e `baixados.mp3.txt`. Sem isso, em `--format both` o MP3 pularia tudo o que o MP4 acabou de registrar.
@@ -162,6 +177,7 @@ O que foi pulado aparece no resumo como *já no histórico* — não conta como 
 | `--playlist-reverse` | Baixa a playlist do fim para o começo |
 | `--no-playlist-folder` | Não cria a subpasta com o nome da playlist |
 | `--live-from-start` | Baixa a live desde o início e segue gravando até ela acabar |
+| `--wait-for-live` | Se a live ainda não começou, espera por ela em vez de falhar |
 | `--archive baixados.txt` | Guarda o histórico e não baixa de novo o que já foi baixado |
 | `-j, --concurrent-fragments 4` | Fragmentos baixados em paralelo por vídeo (`1` desliga) |
 | `--limit-rate 2M` | Limita a velocidade de download |

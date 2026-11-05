@@ -16,6 +16,7 @@ import pytest
 
 import service
 from webui import WebConfig, create_app
+from webui.jobs import Run
 
 
 def wait_for(condition, timeout=3.0):
@@ -300,10 +301,32 @@ def test_the_status_says_when_it_is_recording(app, tmp_path: Path):
     run = app.config["RUNS"].open(["https://youtu.be/a"], service.Options(output=tmp_path))
     assert wait_for(lambda: run.is_over)
 
-    assert routes._status(run)["recording"] is False
+    assert routes._status(run)["open_ended"] is False
     run.state = "downloading"
-    run.current.phase = service.RECORDING
-    assert routes._status(run)["recording"] is True
+    for phase in (service.RECORDING, service.WAITING):
+        run.current.phase = phase
+        assert routes._status(run)["open_ended"] is True
+
+
+def test_the_form_turns_on_wait_for_live(app, tmp_path: Path):
+    client = app.test_client()
+    form = {"links": "https://youtu.be/a", "output": str(tmp_path), "wait_for_live": "on"}
+
+    client.post("/download", data=form)
+    run = app.config["RUNS"].all()[0]
+    assert wait_for(lambda: run.is_over)
+
+    assert run.options.wait_for_live
+
+
+def test_the_progress_keeps_the_link_being_worked_on(tmp_path: Path):
+    run = Run("x", ["https://youtu.be/a"], service.Options(output=tmp_path))
+    run.link_started(2, 3, "https://youtu.be/a", "mp4")
+
+    run.progress(service.Progress(phase=service.WAITING))
+
+    assert (run.current.phase, run.current.current_link) == (service.WAITING, 2)
+    assert run.current.total_links == 3
 
 
 def test_a_finished_run_shows_no_phase(app, tmp_path: Path):

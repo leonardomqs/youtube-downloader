@@ -100,7 +100,12 @@ class Run(service.Observer):
 
     def progress(self, p: service.Progress) -> None:
         with self._lock:
-            self.current = dataclasses.replace(p)
+            # Quem conta o link é `link_started`; o andamento não sabe em qual está.
+            self.current = dataclasses.replace(
+                p,
+                current_link=self.current.current_link,
+                total_links=self.current.total_links,
+            )
 
     def item(self, i: service.Item) -> None:
         with self._lock:
